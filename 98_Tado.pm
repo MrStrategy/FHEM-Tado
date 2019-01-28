@@ -11,10 +11,11 @@ use HttpUtils;
 use JSON;
 
 my %Tado_gets = (
+	"update" => " ",
 	"home"	=> " ",
 	"zones"	=> " ",
 	"devices"  => " ",
-	"update" => " "
+	"weather" => " "
 );
 
 my %Tado_sets = (
@@ -205,6 +206,11 @@ sub Tado_Get($@) {
     	Tado_GetUpdate($hash);
     	delete $hash->{LOCAL};
        
+	}  elsif($opt eq "weather")  {
+	   
+		Log3 $name, 3, "Tado_Get $name: Getting weather";  
+    	return Tado_DefineWeatherChannel($hash);       
+       
 	}  else
 	{
 		my @cList = keys %Tado_gets;
@@ -273,6 +279,14 @@ sub Tado_GetHomes($){
 	my $name = $hash->{NAME};
 
 
+	if (not defined $hash){
+        my $msg = "Error on Tado_GetHomes. Missing hash variable";
+        Log3 'Tado', 1, $msg;
+        return $msg; 
+    
+    }
+
+
 	my $readTemplate = $url{"getHomeId"};
 	   
 	my $passwd = urlEncode($hash->{Password});
@@ -322,6 +336,19 @@ sub Tado_GetZones($){
 	my ($hash) = @_;
 	my $name = $hash->{NAME};
 
+	if (not defined $hash){
+        my $msg = "Error on Tado_GetZones. Missing hash variable";
+        Log3 'Tado', 1, $msg;
+        return $msg; 
+    
+    }
+    
+    if (not defined $hash->{"HomeID"}){
+        my $msg = "Error on Tado_GetZones. Missing HomeID. Please define Home first.";
+        Log3 'Tado', 1, $msg;
+        return $msg; 
+    
+    }
 
 	my $readTemplate = $url{"getZoneDetails"};
 	   
@@ -487,6 +514,56 @@ sub Tado_GetDevices($){
 
 }
 
+sub Tado_DefineWeatherChannel($){
+	
+	my ($hash) = @_;
+	my $name = $hash->{NAME};
+
+	if (not defined $hash){
+        my $msg = "Error on Tado_DefineWeatherChannel. Missing hash variable";
+        Log3 'Tado', 1, $msg;
+        return $msg; 
+    
+    }
+    
+    if (not defined $hash->{"HomeID"}){
+        my $msg = "Error on Tado_DefineWeatherChannel. Missing HomeID. Please define Home first.";
+        Log3 'Tado', 1, $msg;
+        return $msg; 
+    
+    }
+
+    my $code = $name ."-weather";
+        
+    	if( defined($modules{TadoDevice}{defptr}{$code}) ) {
+    	    my $msg = "Tado_GetDevices ($name): weather device already defined as '$modules{TadoDevice}{defptr}{$code}->{NAME}'";
+      		Log3 $name, 5, $msg;
+    	} else {
+    	
+    		my $deviceName = "Tado_Weather";
+	   		$deviceName =~ s/ /_/g;
+	   		my $define= "$deviceName TadoDevice weather IODev=$name";
+   
+	   		Log3 $name, 1, "Tado_DefineWeatherChannel ($name): create new device '$deviceName'.";
+
+	   		my $cmdret= CommandDefine(undef,$define);
+    	
+    		if(defined $cmdret) {
+	   			if( not index($cmdret, 'already defined') != -1) {
+	   		   		Log3 $name, 1, "$name: Autocreate: An error occurred while creating weather device': $cmdret";
+	   			}  
+	   		} else {
+	   		
+	   		    my $deviceHash = $modules{TadoDevice}{defptr}{$code};
+	   		    
+		   		CommandAttr(undef,"$deviceName room Tado");
+			   	CommandAttr(undef,"$deviceName subType weather");
+			   	Tado_UpdateWeather($hash);
+		   	}
+	}
+	return undef;
+}
+
 sub Tado_GetEarlyStart($){
 	
 	my ($hash) = @_;
@@ -522,8 +599,72 @@ sub Tado_GetEarlyStart($){
 		return undef;
 }
 
-sub Tado_GetUpdate($)
-{
+sub Tado_UpdateWeather($){
+  my ($hash) = @_;
+  my $name = $hash->{NAME};
+
+    if (not defined $hash){
+        Log3 'Tado', 1, "Error on Tado_GetWeather. Missing hash variable";
+        return undef; 
+    
+    }
+    
+    my $code = $name ."-weather";
+        
+    if (not defined($modules{TadoDevice}{defptr}{$code})) {
+      		Log3 $name, 3, "Tado_UpdateWeather ($name) : Not updating weather channel as it is not defined.";
+      		return undef;
+    }
+    	        
+ 
+  Log3 $name, 4, "Tado_UpdateWeather Called. Name: $name"; 
+
+
+	my $readTemplate = $url{"getWeather"};
+	   
+	my $passwd = urlEncode($hash->{Password});
+	my $user = urlEncode($hash->{Username});
+
+
+	$readTemplate =~ s/#HomeID#/$hash->{HomeID}/g;
+	$readTemplate =~ s/#Username#/$user/g;
+	$readTemplate =~ s/#Password#/$passwd/g;
+
+
+	my $d = Tado_httpSimpleOperation( $hash , $readTemplate, 'GET'  );
+    
+	if (defined $d && ref($d) eq "HASH" && defined $d->{errors}){
+       log 1, Dumper $d;
+   	$hash->{STATE} = "Error: $d->{errors}[0]->{code} / $d->{errors}[0]->{title}";	
+   	return undef;
+   
+   } else {
+
+      # Readings updaten
+       readingsBeginUpdate($hash);
+       
+     
+       readingsEndUpdate($hash, 1);
+       
+       my $overlay =  defined $d->{overlay} ? 1 : 0;
+       
+       my $message = "Tado;weather;weather;" 
+       . $d->{solarIntensity}->{percentage} . ";"
+       . $d->{solarIntensity}->{timestamp} . ";"
+       . $d->{outsideTemperature}->{celsius} . ";"
+       . $d->{outsideTemperature}->{timestamp} . ";"
+       . $d->{weatherState}->{value} . ";"
+       . $d->{weatherState}->{timestamp};
+       
+		Log3 $name, 4, "$name: trying to dispatch message: $message"; 
+       	my $found = Dispatch($hash, $message);
+       	Log3 $name, 4, "$name: tried to dispatch message. Result: $found";       	
+	}
+	
+	return undef;
+}
+
+sub Tado_GetUpdate($){
   my ($hash) = @_;
   my $name = $hash->{NAME};
 
@@ -569,6 +710,13 @@ sub Tado_GetUpdate($)
     $readTemplate =~ s/#Password#/$passwd/g;
        
 	my $d = Tado_httpSimpleOperation( $hash , $readTemplate , 'GET' );
+
+	if (defined $d && ref($d) eq "HASH" && defined $d->{errors}){
+       log 1, Dumper $d;
+   	   $hash->{STATE} = "Error: $d->{errors}[0]->{code} / $d->{errors}[0]->{title}";	
+   	   return undef;
+   } else {
+
        
        # Readings updaten
        readingsBeginUpdate($hash);
@@ -643,13 +791,11 @@ sub Tado_GetUpdate($)
 	readingsBulkUpdate($hash, "LastUpdate", localtime );
 	readingsEndUpdate($hash, 1);
 	
-       return undef;
-
+    return undef;
+	}
 }
 
-
-sub Tado_Write ($$)
-{
+sub Tado_Write ($$){
 	my ($hash,$code,$zoneID,$param1,$param2)= @_;
 	my $name = $hash->{NAME};
 	
@@ -716,6 +862,7 @@ sub Tado_Write ($$)
     if ($code eq 'Update')
 	{  
 		Tado_GetUpdate($hash);
+		Tado_UpdateWeather($hash);
     }  
     
     

@@ -204,6 +204,19 @@ sub TadoDevice_Parse ($$)
   		
   		} elsif ($values[2] eq 'earlyStart') {
   			CommandAttr(undef,"$name earlyStart $values[3]");
+  		} elsif ($values[2] eq 'weather') {
+  			readingsBeginUpdate($hash);
+	   
+		   	readingsBulkUpdate($hash, "solarIntensity", $values[3] );
+		   	readingsBulkUpdate($hash, "solarIntensity-timestamp", $values[4] );
+		   	readingsBulkUpdate($hash, "outsideTemperature", $values[5] );
+		   	readingsBulkUpdate($hash, "outsideTemperature-timestamp", $values[6] );
+		   	readingsBulkUpdate($hash, "weatherState", $values[7] );
+		   	readingsBulkUpdate($hash, "weatherState-timestamp", $values[8] );		
+		   	
+		   	readingsEndUpdate($hash, 1);
+		   	
+		   	$hash->{STATE} = sprintf("T: %.1f &deg;C Solar: %.1f%<br>%s", $values[5], $values[3], $values[7]);	
  	    }
   
 		# Rückgabe des Gerätenamens, für welches die Nachricht bestimmt ist.
