@@ -10,12 +10,14 @@ The 98_Tado.pm contains the source code to define a Tado device. The Tado device
 The 98_TadoDevice.pm contains the code to define the different TadoDevices. The devices do represent either a physical device represented by a serial number, a so called zone basically representing a room or the weather channel containing the weather data used by Tado to optimize the heating times.
 
 <h2>There are still some things todo which I have not done so far:</h2>
- - Switch from synchronous communication to asynchronous communication so FHEM is not blocked.
- - Parse the several date information and bring this to local time
- - Add validation on inserted serial numbers
- - Add more flexible options to set a zone / room temperature
- - [bug] Add auto update to waether-channel
-
+<ul>
+<li>- Switch from synchronous communication to asynchronous communication so FHEM is not blocked.</li>
+<li>- Parse the several date information and bring this to local time</li>
+<li>- Add validation on inserted serial numbers</li>
+<li>- Add more flexible options to set a zone / room temperature</li>
+<li>- [bug] Add auto update to waether-channel</li>
+<li>- [bug] Request to update the values for early start is not working</li> 
+</ul>
 
 
 <h3>Tado</h3>
