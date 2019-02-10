@@ -10,6 +10,10 @@ use Encode qw( encode_utf8 );
 use HttpUtils;
 use JSON;
 
+
+#TODO change logic from sync web handling to async
+
+
 my %Tado_gets = (
 update => " ",
 home	=> " ",
@@ -53,8 +57,8 @@ sub Tado_Initialize($)
 	$hash->{Clients} = ':TadoDevice:';
 	$hash->{MatchList} = { '1:TadoDevice'  => '^Tado;.*'};
 	$hash->{AttrList} =
-	'generateDevices:yes,no'
-	. 'generateWeather:yes,no'
+	'generateDevices:yes,no '
+	. 'generateWeather:yes,no '
 	. $readingFnAttributes;
 
 	Log 3, "Tado module initialized.";
