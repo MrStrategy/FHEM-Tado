@@ -4,24 +4,31 @@ A FHEM extension to interact with Tado cloud
 The FHEM extension requires two files:
  - 98_Tado.pm
  - 98_TadoDevice.pm
- 
+
 The extension is build based on the two-tier module concept.
 The 98_Tado.pm contains the source code to define a Tado device. The Tado device acts like a bridge and manages the communication towards the Tado cloud.
 The 98_TadoDevice.pm contains the code to define the different TadoDevices. The devices do represent either a physical device represented by a serial number, a so called zone basically representing a room or the weather channel containing the weather data used by Tado to optimize the heating times.
 
+<h2>There are still some things todo which I have not done so far:</h2>
+ - Switch from synchronous communication to asynchronous communication so FHEM is not blocked.
+ - Parse the several date information and bring this to local time
+ - Add validation on inserted serial numbers
+ - Add more flexible options to set a zone / room temperature
+
+
 
 <h3>Tado</h3>
 <ul>
-    <i>Tado</i> implements an interface to the Tado cloud. The plugin can be used to read and write 
+    <i>Tado</i> implements an interface to the Tado cloud. The plugin can be used to read and write
     temperature and settings from or to the Tado cloud. The communication is based on the reengineering of the protocol done by
     Stephen C. Phillips. See <a href="http://blog.scphillips.com/posts/2017/01/the-tado-api-v2/">his blog</a> for more details.
-    Not all functions are implemented within this FHEM extension. By now the plugin is capable to 
-    interact with the so called zones (rooms) and the registered devices. The devices cannot be 
+    Not all functions are implemented within this FHEM extension. By now the plugin is capable to
+    interact with the so called zones (rooms) and the registered devices. The devices cannot be
     controlled directly. All interaction - like setting a temperature - must be done via the zone and not the device.
-    This means all configuration like the registration of new devices or the assignment of a device to a room 
+    This means all configuration like the registration of new devices or the assignment of a device to a room
     must be done using the Tado app or Tado website directly. Once the configuration is completed this plugin can
     be used.
-    This device is the 'bridge device' like a HueBridge or a CUL. Per zone or device a dedicated device of type 
+    This device is the 'bridge device' like a HueBridge or a CUL. Per zone or device a dedicated device of type
     'TadoDevice' will be created.
     <br><br>
     <a name="Tadodefine"></a>
@@ -68,23 +75,23 @@ The 98_TadoDevice.pm contains the code to define the different TadoDevices. The 
         Options:
         <ul>
               <li><i>home</i><br>
-                  Gets the home identifier from Tado cloud. 
+                  Gets the home identifier from Tado cloud.
                   The home identifier is required for all further actions towards the Tado cloud.
                   Currently the FHEM extension only supports a single home. If you have more than one home only the first home is loaded.
                   <br/><b>This function is automatically executed once when a new Tado device is defined.</b></li>
               <li><i>zones</i><br>
                   Every zone in the Tado cloud represents a room.
                   This command gets all zones defined for the current home.
-                  Per zone a new FHEM device is created. The device can be used to display and 
+                  Per zone a new FHEM device is created. The device can be used to display and
                   overwrite the current temperatures.
-                  This command can always be executed to update the list of defined zones. It will not touch any existing 
+                  This command can always be executed to update the list of defined zones. It will not touch any existing
                   zone but add new zones added since last update.
                   <br/><b>This function is automatically executed once when a new Tado device is defined.</b></li>
                   </li>
               <li><i>devices</i><br>
                   Fetches all devices from Tado cloud and creates one TadoDevice instance
                   per fetched device.
-                  This command can always be executed to update the list of defined devices. 
+                  This command can always be executed to update the list of defined devices.
                   It will not touch existing devices but add new ones.
                   </li>
               <li><i>update</i><br>
@@ -106,7 +113,7 @@ The 98_TadoDevice.pm contains the code to define the different TadoDevices. The 
     to a tado cloud account.
     It can only be used in conjunction with a Tado device (a Tado bridge).
     The TadoDevice is intended to display the current measurements of a zone or device and allow
-    the interaction. It can be used to set or reset the temperature within a zone or to 
+    the interaction. It can be used to set or reset the temperature within a zone or to
     display a "hi" statement on a physical Tado device.
     TadoDevices should not be created manually. They are auto generated once a Tado device is defined.
     <br><br>
@@ -119,10 +126,10 @@ The 98_TadoDevice.pm contains the code to define the different TadoDevices. The 
         <br><br>
         Normally the define statement should be called by the Tado device.
         If called manually the TadoId and the IO-Device must be provided.
-        The TadoId is either the zone Id if a zone shall be created or the serial number 
+        The TadoId is either the zone Id if a zone shall be created or the serial number
         of a physical device. The IO-Device must be of type Tado.
     </ul>
-    <br> 
+    <br>
     <a name="TadoDeviceset"></a>
     <b>Set</b><br>
     <ul>
