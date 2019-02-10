@@ -695,7 +695,9 @@ sub Tado_GetUpdate($){
   }
 
 
-  for (my $i=1; $i <= $hash->{"Zones"}; $i++) {
+  Log3 $name, 3, "Getting update for $hash->{Zones} zones.";
+
+  for (my $i=1; $i <= $hash->{Zones}; $i++) {
 
 	my $readTemplate = $url{"getZoneTemperature"};
 	   
@@ -715,7 +717,7 @@ sub Tado_GetUpdate($){
        log 1, Dumper $d;
    	   $hash->{STATE} = "Error: $d->{errors}[0]->{code} / $d->{errors}[0]->{title}";	
    	   return undef;
-   } else {
+    } else {
 
        
        # Readings updaten
@@ -787,12 +789,13 @@ sub Tado_GetUpdate($){
        	Log3 $name, 4, "$name: tried to dispatch message. Result: $found";
 	}
 	
+	}
 	readingsBeginUpdate($hash);
 	readingsBulkUpdate($hash, "LastUpdate", localtime );
 	readingsEndUpdate($hash, 1);
 	
     return undef;
-	}
+	
 }
 
 sub Tado_Write ($$){
