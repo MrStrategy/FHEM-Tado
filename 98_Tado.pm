@@ -51,9 +51,7 @@ sub Tado_Initialize($)
 	$hash->{GetFn}      = 'Tado_Get';
 	$hash->{AttrFn}     = 'Tado_Attr';
 	$hash->{ReadFn}     = 'Tado_Read';
-
 	$hash->{WriteFn}    = 'Tado_Write';
-
 	$hash->{Clients} = ':TadoDevice:';
 	$hash->{MatchList} = { '1:TadoDevice'  => '^Tado;.*'};
 	$hash->{AttrList} =
@@ -101,7 +99,7 @@ sub Tado_Define($$)
 	#If not set -> set to 60 seconds
 	#If less then 5 seconds set to 5
 	#If not an integer abort with failure.
-  my $interval = 60;
+	my $interval = 60;
 	if (defined $param[4]) {
 		if ( $param[4] =~ /^\d+$/ ) {
 			$interval = $param[4];
@@ -121,7 +119,7 @@ sub Tado_Define($$)
 	$attr{$name}{generateDevices} = "no" if( !defined( $attr{$name}{generateDevices} ) );
 	$attr{$name}{generateWeather} = "no" if( !defined( $attr{$name}{generateWeather} ) );
 
-  #Initial load of the homes
+	#Initial load of the homes
 	Tado_GetHomes($hash);
 
 	RemoveInternalTimer($hash);
@@ -131,10 +129,11 @@ sub Tado_Define($$)
 	InternalTimer(gettimeofday()+15, "Tado_GetZones", $hash) if (defined $hash);
 
 	Log3 $name, 5, "Tado_Define $name: Starting timer with Interval $hash->{INTERVAL}";
-	InternalTimer(gettimeofday()+$hash->{INTERVAL}, "Tado_GetUpdate", $hash) if (defined $hash);
+	InternalTimer(gettimeofday()+$hash->{INTERVAL}, "Tado_RequestZoneUpdate", $hash) if (defined $hash);
 
 	return undef;
 }
+
 
 sub Tado_Undef($$)
 {
@@ -143,6 +142,7 @@ sub Tado_Undef($$)
 	RemoveInternalTimer($hash);
 	return undef;
 }
+
 
 sub Tado_httpSimpleOperation($$$;$)
 {
@@ -214,7 +214,7 @@ sub Tado_Get($@)
 
 		Log3 $name, 3, "Tado_Get $name: Updating readings for all zones";
 		$hash->{LOCAL} = 1;
-		Tado_GetUpdate($hash);
+		Tado_RequestZoneUpdate($hash);
 		delete $hash->{LOCAL};
 
 	}  elsif($opt eq "weather")  {
@@ -228,6 +228,7 @@ sub Tado_Get($@)
 		return "Unknown v2 argument $opt, choose one of " . join(" ", @cList);
 	}
 }
+
 
 sub Tado_Set($@)
 {
@@ -249,10 +250,10 @@ sub Tado_Set($@)
 		RemoveInternalTimer($hash);
 
 		$hash->{LOCAL} = 1;
-		Tado_GetUpdate($hash);
+		Tado_RequestZoneUpdate($hash);
 		delete $hash->{LOCAL};
 
-		InternalTimer(gettimeofday()+$hash->{INTERVAL}, "Tado_GetUpdate", $hash);
+		InternalTimer(gettimeofday()+$hash->{INTERVAL}, "Tado_RequestZoneUpdate", $hash);
 
 		Log3 $name, 1, "Tado_Set $name: Updated readings and started timer to automatically update readings with interval $hash->{INTERVAL}";
 
@@ -278,10 +279,12 @@ sub Tado_Set($@)
 	}
 }
 
+
 sub Tado_Attr(@)
 {
 	return undef;
 }
+
 
 sub Tado_GetHomes($)
 {
@@ -337,6 +340,7 @@ sub Tado_GetHomes($)
 	}
 
 }
+
 
 sub Tado_GetZones($)
 {
@@ -432,6 +436,7 @@ sub Tado_GetZones($)
 
 }
 
+
 sub Tado_GetDevices($)
 {
 
@@ -516,6 +521,7 @@ sub Tado_GetDevices($)
 	}
 }
 
+
 sub Tado_DefineWeatherChannel($)
 {
 	my ($hash) = @_;
@@ -560,11 +566,12 @@ sub Tado_DefineWeatherChannel($)
 
 			CommandAttr(undef,"$deviceName room Tado");
 			CommandAttr(undef,"$deviceName subType weather");
-			Tado_UpdateWeather($hash);
+			Tado_RequestWeatherUpdate($hash);
 		}
 	}
 	return undef;
 }
+
 
 sub Tado_GetEarlyStart($)
 {
@@ -601,7 +608,154 @@ sub Tado_GetEarlyStart($)
 	return undef;
 }
 
-sub Tado_UpdateWeather($)
+
+sub Tado_UpdateEarlyStartCallback($)
+{
+	my ($param, $err, $data) = @_;
+	my $hash = $param->{hash};
+	my $name = $hash->{NAME};
+
+	if($err ne "")                                                                                                      # wenn ein Fehler bei der HTTP Abfrage aufgetreten ist
+	{
+		Log3 $name, 3, "error while requesting ".$param->{url}." - $err";                                               # Eintrag fürs Log
+		readingsSingleUpdate($hash, "fullResponse", "ERROR", 0);
+		return undef;
+	}
+
+	Log3 $name, 2, "Received non-blocking data from TADO for weather device.";
+
+	Log3 $name, 4, "FHEM -> Tado: " . $param->{url};
+	Log3 $name, 4, "FHEM -> Tado: " . $param->{message} if (defined $param->{message});
+	Log3 $name, 4, "Tado -> FHEM: " . $data;
+	Log3 $name, 5, '$err: ' . $err;
+	Log3 $name, 5, "method: " . $param->{method};
+	Log3 $name, 2, "Something gone wrong" if( $data =~ "/tadoMode/" );
+
+	if (!defined($data) or $param->{method} eq 'DELETE') {
+		return undef;
+	}
+
+	my $d  = decode_json($data) if( !$err );
+	Log3 $name, 5, 'Decoded: ' . Dumper($d);
+
+	if (defined $d && ref($d) eq "HASH" && defined $d->{errors}){
+		log 1, Dumper $d;
+		$hash->{STATE} = "Error: $d->{errors}[0]->{code} / $d->{errors}[0]->{title}";
+		return undef;
+	}
+
+	my $message = "Tado;$param->{zoneID};earlyStart;$d->{enabled}";
+
+	Log3 $name, 4, "$name: trying to dispatch message: $message";
+	my $found = Dispatch($hash, $message);
+	Log3 $name, 4, "$name: tried to dispatch message. Result: $found";
+
+	return undef;
+}
+
+
+sub Tado_RequestEarlyStartUpdate($)
+{
+	my ($hash) = @_;
+	my $name = $hash->{NAME};
+
+	if (not defined $hash){
+		Log3 $name, 1, "Error in Tado_RequestEarlyStartUpdate: No zones defined. Define zones first." if (undef $hash->{"Zones"});
+		return undef;
+	}
+
+	for (my $i=1; $i <= $hash->{Zones}; $i++) {
+
+		my $readTemplate = $url{earlyStart};
+
+		my $passwd = urlEncode($hash->{Password});
+		my $user = urlEncode($hash->{Username});
+
+		my $ZoneName = "Zone_" . $i . "_ID";
+
+		$readTemplate =~ s/#HomeID#/$hash->{HomeID}/g;
+		$readTemplate =~ s/#ZoneID#/$hash->{$ZoneName}/g;
+		$readTemplate =~ s/#Username#/$user/g;
+		$readTemplate =~ s/#Password#/$passwd/g;
+
+	my $request = {
+		url           => $readTemplate,
+		header        => "Content-Type:application/json;charset=UTF-8",
+		method        => 'GET',
+		timeout       =>  2,
+		hideurl       =>  1,
+		callback      => \&Tado_UpdateEarlyStartCallback,
+		hash          => $hash,
+		zoneID        => $i
+	};
+
+	Log3 $name, 5, 'NonBlocking Request: ' . Dumper($request);
+
+	HttpUtils_NonblockingGet($request);
+}
+}
+
+
+
+
+
+
+sub Tado_UpdateWeatherCallback($)
+{
+	my ($param, $err, $data) = @_;
+	my $hash = $param->{hash};
+	my $name = $hash->{NAME};
+
+	if($err ne "")                                                                                                      # wenn ein Fehler bei der HTTP Abfrage aufgetreten ist
+	{
+		Log3 $name, 3, "error while requesting ".$param->{url}." - $err";                                               # Eintrag fürs Log
+		readingsSingleUpdate($hash, "fullResponse", "ERROR", 0);
+		return undef;
+	}
+
+	Log3 $name, 2, "Received non-blocking data from TADO for weather device.";
+
+	Log3 $name, 4, "FHEM -> Tado: " . $param->{url};
+	Log3 $name, 4, "FHEM -> Tado: " . $param->{message} if (defined $param->{message});
+	Log3 $name, 4, "Tado -> FHEM: " . $data;
+	Log3 $name, 5, '$err: ' . $err;
+	Log3 $name, 5, "method: " . $param->{method};
+	Log3 $name, 2, "Something gone wrong" if( $data =~ "/tadoMode/" );
+
+	if (!defined($data) or $param->{method} eq 'DELETE') {
+		return undef;
+	}
+
+	my $d  = decode_json($data) if( !$err );
+	Log3 $name, 5, 'Decoded: ' . Dumper($d);
+
+	if (defined $d && ref($d) eq "HASH" && defined $d->{errors}){
+		log 1, Dumper $d;
+		$hash->{STATE} = "Error: $d->{errors}[0]->{code} / $d->{errors}[0]->{title}";
+		return undef;
+	}
+
+	my $message = "Tado;weather;weather;"
+	. $d->{solarIntensity}->{percentage} . ";"
+	. $d->{solarIntensity}->{timestamp} . ";"
+	. $d->{outsideTemperature}->{celsius} . ";"
+	. $d->{outsideTemperature}->{timestamp} . ";"
+	. $d->{weatherState}->{value} . ";"
+	. $d->{weatherState}->{timestamp};
+
+	Log3 $name, 4, "$name: trying to dispatch message: $message";
+	my $found = Dispatch($hash, $message);
+	Log3 $name, 4, "$name: tried to dispatch message. Result: $found";
+
+	readingsBeginUpdate($hash);
+	readingsBulkUpdate($hash, "LastUpdate", localtime );
+	readingsEndUpdate($hash, 1);
+
+	return undef;
+}
+
+
+sub Tado_RequestWeatherUpdate($)
 {
 	my ($hash) = @_;
 	my $name = $hash->{NAME};
@@ -614,11 +768,11 @@ sub Tado_UpdateWeather($)
 	my $code = $name ."-weather";
 
 	if (not defined($modules{TadoDevice}{defptr}{$code})) {
-		Log3 $name, 3, "Tado_UpdateWeather ($name) : Not updating weather channel as it is not defined.";
+		Log3 $name, 3, "Tado_RequestWeatherUpdate ($name) : Not updating weather channel as it is not defined.";
 		return undef;
 	}
 
-	Log3 $name, 4, "Tado_UpdateWeather Called. Name: $name";
+	Log3 $name, 4, "Tado_RequestWeatherUpdate Called. Name: $name";
 	my $readTemplate = $url{getWeather};
 	my $passwd = urlEncode($hash->{Password});
 	my $user = urlEncode($hash->{Username});
@@ -627,56 +781,152 @@ sub Tado_UpdateWeather($)
 	$readTemplate =~ s/#Username#/$user/g;
 	$readTemplate =~ s/#Password#/$passwd/g;
 
-	my $d = Tado_httpSimpleOperation( $hash , $readTemplate, 'GET'  );
+	my $request = {
+		url           => $readTemplate,
+		header        => "Content-Type:application/json;charset=UTF-8",
+		method        => 'GET',
+		timeout       =>  2,
+		hideurl       =>  1,
+		callback      => \&Tado_UpdateWeatherCallback,
+		hash          => $hash
+	};
+
+	Log3 $name, 5, 'NonBlocking Request: ' . Dumper($request);
+
+	HttpUtils_NonblockingGet($request);
+
+}
+
+
+sub Tado_UpdateZoneCallback($)
+{
+	my ($param, $err, $data) = @_;
+	my $hash = $param->{hash};
+	my $name = $hash->{NAME};
+
+	if($err ne "")                                                                                                      # wenn ein Fehler bei der HTTP Abfrage aufgetreten ist
+	{
+		Log3 $name, 3, "error while requesting ".$param->{url}." - $err";                                               # Eintrag fürs Log
+		readingsSingleUpdate($hash, "fullResponse", "ERROR", 0);
+		return undef;
+	}
+
+	Log3 $name, 2, "Received non-blocking data from TADO for zone " . $param->{zoneID};
+
+	Log3 $name, 4, "FHEM -> Tado: " . $param->{url};
+	Log3 $name, 4, "FHEM -> Tado: " . $param->{message} if (defined $param->{message});
+	Log3 $name, 4, "Tado -> FHEM: " . $data;
+	Log3 $name, 5, '$err: ' . $err;
+	Log3 $name, 5, "method: " . $param->{method};
+	Log3 $name, 2, "Something gone wrong" if( $data =~ "/tadoMode/" );
+
+	if (!defined($data) or $param->{method} eq 'DELETE') {
+		return undef;
+	}
+
+	my $d  = decode_json($data) if( !$err );
+	Log3 $name, 5, 'Decoded: ' . Dumper($d);
 
 	if (defined $d && ref($d) eq "HASH" && defined $d->{errors}){
 		log 1, Dumper $d;
 		$hash->{STATE} = "Error: $d->{errors}[0]->{code} / $d->{errors}[0]->{title}";
 		return undef;
-
-	} else {
-
-		my $overlay =  defined $d->{overlay} ? 1 : 0;
-
-		my $message = "Tado;weather;weather;"
-		. $d->{solarIntensity}->{percentage} . ";"
-		. $d->{solarIntensity}->{timestamp} . ";"
-		. $d->{outsideTemperature}->{celsius} . ";"
-		. $d->{outsideTemperature}->{timestamp} . ";"
-		. $d->{weatherState}->{value} . ";"
-		. $d->{weatherState}->{timestamp};
-
-		Log3 $name, 4, "$name: trying to dispatch message: $message";
-		my $found = Dispatch($hash, $message);
-		Log3 $name, 4, "$name: tried to dispatch message. Result: $found";
 	}
+
+	my $overlay =  defined $d->{overlay} ? 1 : 0;
+
+	my $message = "Tado;$param->{zoneID};temp;"
+	#measured-temp
+	. $d->{sensorDataPoints}->{insideTemperature}->{celsius} . ";"
+	#measured-temp-timestamp
+	. $d->{sensorDataPoints}->{insideTemperature}->{timestamp} . ";"
+	#measured-temp-fahrenheit
+	. $d->{sensorDataPoints}->{insideTemperature}->{fahrenheit} . ";"
+	#measured-temp-precision
+	. $d->{sensorDataPoints}->{insideTemperature}->{precision}->{celsius} . ";"
+	#measured-temp-precision-fahrenheit
+	. $d->{sensorDataPoints}->{insideTemperature}->{precision}->{fahrenheit} . ";"
+	#desired-temp
+	. $d->{setting}->{temperature}->{celsius}. ";"
+
+	#measured-humidity
+	. $d->{sensorDataPoints}->{humidity}->{percentage} . ";"
+	#measured-humidity-timestamp
+	. $d->{sensorDataPoints}->{humidity}->{timestamp} . ";"
+	#link
+	. $d->{link}->{state} . ";"
+	#open-window
+	. $d->{openWindow} . ";"
+	#heating-percentage
+	. $d->{activityDataPoints}->{heatingPower}->{percentage} . ";"
+	#heating-percentage-timestamp
+	. $d->{activityDataPoints}->{heatingPower}->{timestamp} . ";"
+
+
+	#nextScheduleChange-temperature
+	. $d->{nextScheduleChange}->{setting}->{temperature}->{celsius} . ";"
+	#nextScheduleChange-power
+	. $d->{nextScheduleChange}->{setting}->{power} . ";"
+	#nextScheduleChange-start
+	. $d->{nextScheduleChange}->{start} . ";"
+
+
+	#overlay-active
+	. $overlay;
+
+	if ($overlay) {
+		$message .= ";"
+		#overlay-mode
+		. $d->{overlay}->{type} . ";"
+		#overlay-power
+		. $d->{overlay}->{setting}->{power} . ";"
+		#overlay-desired-temperature
+		. $d->{overlay}->{setting}->{temperature}->{celsius} . ";"
+		#overlay-termination-mode
+		. $d->{overlay}->{termination}->{type} . ";"
+		#overlay-termination-durationInSeconds
+		. $d->{overlay}->{termination}->{durationInSeconds} . ";"
+		#overlay-overlay-termination-expiry
+		. $d->{overlay}->{termination}->{expiry} . ";"
+		#overlay-overlay-termination-remainingTimeInSeconds
+		. $d->{overlay}->{termination}->{remainingTimeInSeconds};
+	}
+
+	Log3 $name, 4, "$name: trying to dispatch message: $message";
+	my $found = Dispatch($hash, $message);
+	Log3 $name, 4, "$name: tried to dispatch message. Result: $found";
+
+	readingsBeginUpdate($hash);
+	readingsBulkUpdate($hash, "LastUpdate", localtime );
+	readingsEndUpdate($hash, 1);
 
 	return undef;
 }
 
-sub Tado_GetUpdate($)
+
+sub Tado_RequestZoneUpdate($)
 {
 	my ($hash) = @_;
 	my $name = $hash->{NAME};
 
 	if (not defined $hash){
-		Log3 'Tado', 1, "Error on Tado_GetUpdate. Missing hash variable";
+		Log3 'Tado', 1, "Error on Tado_RequestZoneUpdate. Missing hash variable";
 		return undef;
 	}
 
 	if (not defined $hash->{"Zones"}){
-		Log3 'Tado', 1, "Error on Tado_GetUpdate. Missing zones. Please define zones first.";
+		Log3 'Tado', 1, "Error on Tado_RequestZoneUpdate. Missing zones. Please define zones first.";
 		return undef;
 	}
 
-	Log3 $name, 4, "Tado_GetUpdate Called. Name: $name";
+	Log3 $name, 4, "Tado_RequestZoneUpdate Called for non-blocking value update. Name: $name";
 
 	#local allows call of function without adding new timer.
 	#must be set before call ($hash->{LOCAL} = 1) and removed after (delete $hash->{LOCAL};)
 	if(!$hash->{LOCAL}) {
 		RemoveInternalTimer($hash);
 		#Log3 "Test", 1, Dumper($hash);
-		InternalTimer(gettimeofday()+$hash->{INTERVAL}, "Tado_GetUpdate", $hash);
+		InternalTimer(gettimeofday()+$hash->{INTERVAL}, "Tado_RequestZoneUpdate", $hash);
 		$hash->{STATE} = 'Polling';
 	}
 
@@ -696,92 +946,25 @@ sub Tado_GetUpdate($)
 		$readTemplate =~ s/#Username#/$user/g;
 		$readTemplate =~ s/#Password#/$passwd/g;
 
-		my $d = Tado_httpSimpleOperation( $hash , $readTemplate , 'GET' );
+		my $request = {
+			url           => $readTemplate,
+			header        => "Content-Type:application/json;charset=UTF-8",
+			method        => 'GET',
+			timeout       =>  2,
+			hideurl       =>  1,
+			callback      => \&Tado_UpdateZoneCallback,
+			hash          => $hash,
+			zoneID        => $i
+		};
 
-		if (defined $d && ref($d) eq "HASH" && defined $d->{errors}){
-			log 1, Dumper $d;
-			$hash->{STATE} = "Error: $d->{errors}[0]->{code} / $d->{errors}[0]->{title}";
-			return undef;
-		} else {
+		Log3 $name, 5, 'NonBlocking Request: ' . Dumper($request);
 
-
-			# Readings updaten
-			readingsBeginUpdate($hash);
-
-
-			readingsEndUpdate($hash, 1);
-
-			my $overlay =  defined $d->{overlay} ? 1 : 0;
-
-			my $message = "Tado;$i;temp;"
-			#measured-temp
-			. $d->{sensorDataPoints}->{insideTemperature}->{celsius} . ";"
-			#measured-temp-timestamp
-			. $d->{sensorDataPoints}->{insideTemperature}->{timestamp} . ";"
-			#measured-temp-fahrenheit
-			. $d->{sensorDataPoints}->{insideTemperature}->{fahrenheit} . ";"
-			#measured-temp-precision
-			. $d->{sensorDataPoints}->{insideTemperature}->{precision}->{celsius} . ";"
-			#measured-temp-precision-fahrenheit
-			. $d->{sensorDataPoints}->{insideTemperature}->{precision}->{fahrenheit} . ";"
-			#desired-temp
-			. $d->{setting}->{temperature}->{celsius}. ";"
-
-			#measured-humidity
-			. $d->{sensorDataPoints}->{humidity}->{percentage} . ";"
-			#measured-humidity-timestamp
-			. $d->{sensorDataPoints}->{humidity}->{timestamp} . ";"
-			#link
-			. $d->{link}->{state} . ";"
-			#open-window
-			. $d->{openWindow} . ";"
-			#heating-percentage
-			. $d->{activityDataPoints}->{heatingPower}->{percentage} . ";"
-			#heating-percentage-timestamp
-			. $d->{activityDataPoints}->{heatingPower}->{timestamp} . ";"
-
-
-			#nextScheduleChange-temperature
-			. $d->{nextScheduleChange}->{setting}->{temperature}->{celsius} . ";"
-			#nextScheduleChange-power
-			. $d->{nextScheduleChange}->{setting}->{power} . ";"
-			#nextScheduleChange-start
-			. $d->{nextScheduleChange}->{start} . ";"
-
-
-			#overlay-active
-			. $overlay;
-
-			if ($overlay) {
-				$message .= ";"
-				#overlay-mode
-				. $d->{overlay}->{type} . ";"
-				#overlay-power
-				. $d->{overlay}->{setting}->{power} . ";"
-				#overlay-desired-temperature
-				. $d->{overlay}->{setting}->{temperature}->{celsius} . ";"
-				#overlay-termination-mode
-				. $d->{overlay}->{termination}->{type} . ";"
-				#overlay-termination-durationInSeconds
-				. $d->{overlay}->{termination}->{durationInSeconds} . ";"
-				#overlay-overlay-termination-expiry
-				. $d->{overlay}->{termination}->{expiry} . ";"
-				#overlay-overlay-termination-remainingTimeInSeconds
-				. $d->{overlay}->{termination}->{remainingTimeInSeconds};
-			}
-			Log3 $name, 4, "$name: trying to dispatch message: $message";
-			my $found = Dispatch($hash, $message);
-			Log3 $name, 4, "$name: tried to dispatch message. Result: $found";
-		}
+		HttpUtils_NonblockingGet($request);
 
 	}
-	readingsBeginUpdate($hash);
-	readingsBulkUpdate($hash, "LastUpdate", localtime );
-	readingsEndUpdate($hash, 1);
-
-	return undef;
 
 }
+
 
 sub Tado_Write ($$)
 {
@@ -847,8 +1030,8 @@ sub Tado_Write ($$)
 
 	if ($code eq 'Update')
 	{
-		Tado_GetUpdate($hash);
-		Tado_UpdateWeather($hash);
+		Tado_RequestZoneUpdate($hash);
+		Tado_RequestWeatherUpdate($hash);
 	}
 
 	if ($code eq 'Hi')

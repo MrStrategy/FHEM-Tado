@@ -14,6 +14,7 @@ The 98_TadoDevice.pm contains the code to define the different TadoDevices. The 
  - Parse the several date information and bring this to local time
  - Add validation on inserted serial numbers
  - Add more flexible options to set a zone / room temperature
+ - [bug] Add auto update to waether-channel
 
 
 
