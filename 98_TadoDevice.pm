@@ -7,8 +7,8 @@ update	=> " "
 );
 
 my %TadoDevice_zone_sets = (
-automatic  => ' ',
-temperature	=> " ",
+automatic             => ' ',
+temperature	          => " ",
 'temperature-for-60'	=> " ",
 'temperature-for-90'	=> " ",
 'temperature-for-120'	=> " ",

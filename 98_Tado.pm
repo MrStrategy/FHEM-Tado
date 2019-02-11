@@ -678,25 +678,22 @@ sub Tado_RequestEarlyStartUpdate($)
 		$readTemplate =~ s/#Username#/$user/g;
 		$readTemplate =~ s/#Password#/$passwd/g;
 
-	my $request = {
-		url           => $readTemplate,
-		header        => "Content-Type:application/json;charset=UTF-8",
-		method        => 'GET',
-		timeout       =>  2,
-		hideurl       =>  1,
-		callback      => \&Tado_UpdateEarlyStartCallback,
-		hash          => $hash,
-		zoneID        => $i
-	};
+		my $request = {
+			url           => $readTemplate,
+			header        => "Content-Type:application/json;charset=UTF-8",
+			method        => 'GET',
+			timeout       =>  2,
+			hideurl       =>  1,
+			callback      => \&Tado_UpdateEarlyStartCallback,
+			hash          => $hash,
+			zoneID        => $i
+		};
 
-	Log3 $name, 5, 'NonBlocking Request: ' . Dumper($request);
+		Log3 $name, 5, 'NonBlocking Request: ' . Dumper($request);
 
-	HttpUtils_NonblockingGet($request);
+		HttpUtils_NonblockingGet($request);
+	}
 }
-}
-
-
-
 
 
 
@@ -1031,6 +1028,7 @@ sub Tado_Write ($$)
 	if ($code eq 'Update')
 	{
 		Tado_RequestZoneUpdate($hash);
+		Tado_RequestEarlyStartUpdate($hash);
 		Tado_RequestWeatherUpdate($hash);
 	}
 
