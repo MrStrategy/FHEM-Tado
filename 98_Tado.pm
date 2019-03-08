@@ -316,7 +316,7 @@ sub Tado_GetHomes($)
 
 		readingsBeginUpdate($hash);
 		readingsBulkUpdate($hash, "HomeID", $d->{homes}[0]->{id} );
-		readingsBulkUpdate($hash, "HomeName", $d->{homes}[0]->{name});
+		readingsBulkUpdate($hash, "HomeName", makeDeviceName($d->{homes}[0]->{name}));
 		readingsEndUpdate($hash, 1);
 
 		$hash->{HomeID} = $d->{homes}[0]->{id};
@@ -328,7 +328,7 @@ sub Tado_GetHomes($)
 		if (scalar (@{$d->{homes}}) > 1 ){
 			readingsBeginUpdate($hash);
 			readingsBulkUpdate($hash, "HomeID_2", $d->{homes}[1]->{id} );
-			readingsBulkUpdate($hash, "HomeName_2", $d->{homes}[1]->{name});
+			readingsBulkUpdate($hash, "HomeName_2",  makeDeviceName($d->{homes}[1]->{name}));
 			readingsEndUpdate($hash, 1);
 
 			$hash->{HomeID_2} = $d->{homes}[1]->{id};
@@ -385,7 +385,7 @@ sub Tado_GetZones($)
 		for my $item( @{$d} ){
 
 			readingsBulkUpdate($hash, "Zone_" . $item->{id} . "_ID"  , $item->{id} );
-			readingsBulkUpdate($hash, "Zone_" . $item->{id} . "_Name"  , $item->{name} );
+			readingsBulkUpdate($hash, "Zone_" . $item->{id} . "_Name"  ,  makeDeviceName($item->{name}) );
 			readingsBulkUpdate($hash, "Zone_" . $item->{id} . "_Type"  , $item->{type} );
 			readingsBulkUpdate($hash, "Zone_" . $item->{id} . "_DateCreated"  , $item->{dateCreated} );
 			readingsBulkUpdate($hash, "Zone_" . $item->{id} . "_SupportsDazzle"  , $item->{supportsDazzle} );
@@ -393,7 +393,7 @@ sub Tado_GetZones($)
 			$hash->{"Zones"} = $item->{id};
 
 			$hash->{"Zone_" . $item->{id} . "_ID"} = $item->{id};
-			$hash->{"Zone_" . $item->{id} . "_Name"} = $item->{name};
+			$hash->{"Zone_" . $item->{id} . "_Name"} =  makeDeviceName($item->{name});
 			$hash->{"Zone_" . $item->{id} . "_Type"} = $item->{type};
 			$hash->{"Zone_" . $item->{id} . "_DateCreated"} = $item->{dateCreated};
 			$hash->{"Zone_" . $item->{id} . "_SupportsDazzle"} = $item->{supportsDazzle};
