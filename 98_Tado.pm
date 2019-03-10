@@ -82,18 +82,26 @@ sub Tado_Define($$)
 
 	#Check if the username is an email address
 	if ( $param[2] =~ /^.+@.+$/ ) {
-		$hash->{Username} = $param[2];
-		setKeyValue(  "Tado_".$hash->{Username}, $param[2] );
+		my $username = $param[2];
+		$hash->{Username} = $username;
+		setKeyValue(  "Tado_".$hash->{Username}, $username );
 	} else {
 		$errmsg = "specify valid email address within the field username. Format: define <name> Tado <username> <password> [interval]";
 		Log3 $name, 1, "Tado $name: " . $errmsg;
 		return $errmsg;
 	}
 
-	#Take password as it is.
-	#TODO: Potential optimization to encrypt the password.
-	$hash->{Password} = $param[3];
-	setKeyValue(  "Tado_".$hash->{Password}, $param[3] );
+	#Take password and use custom encryption.
+	# Encryption is taken from fitbit / withings module
+	my $password = tado_encrypt($param[3]);
+	$hash->{Password} = $password;
+	setKeyValue(  "Tado_".$hash->{Password}, $password );
+
+  if (defined $param[4]) {
+     $hash->{DEF} = "$hash->{Username} $password $param[4]";
+	 } else {
+		$hash->{DEF} = "$hash->{Username} $password";
+	 }
 
 	#Check if interval is set and numeric.
 	#If not set -> set to 60 seconds
@@ -113,6 +121,7 @@ sub Tado_Define($$)
 	if( $interval < 5 ) { $interval = 5; }
 	$hash->{INTERVAL} = $interval;
 	setKeyValue(  "Tado_".$hash->{Interval}, $param[4] );
+
 
 	$hash->{STATE} = "Undefined";
 
@@ -299,7 +308,7 @@ sub Tado_GetHomes($)
 
 	my $readTemplate = $url{"getHomeId"};
 
-	my $passwd = urlEncode($hash->{Password});
+	my $passwd = urlEncode(tado_decrypt($hash->{Password}));
 	my $user = urlEncode($hash->{Username});
 
 	$readTemplate =~ s/#Username#/$user/g;
@@ -362,7 +371,7 @@ sub Tado_GetZones($)
 
 	my $readTemplate = $url{"getZoneDetails"};
 
-	my $passwd = urlEncode($hash->{Password});
+	my $passwd = urlEncode(tado_decrypt($hash->{Password}));
 	my $user = urlEncode($hash->{Username});
 
 
@@ -446,7 +455,7 @@ sub Tado_GetDevices($)
 
 	my $readTemplate = $url{"getDevices"};
 
-	my $passwd = urlEncode($hash->{Password});
+	my $passwd = urlEncode(tado_decrypt($hash->{Password}));
 	my $user = urlEncode($hash->{Username});
 
 
@@ -587,7 +596,7 @@ sub Tado_GetEarlyStart($)
 
 		my $readTemplate = $url{earlyStart};
 
-		my $passwd = urlEncode($hash->{Password});
+		my $passwd = urlEncode(tado_decrypt($hash->{Password}));
 		my $user = urlEncode($hash->{Username});
 
 		my $ZoneName = "Zone_" . $i . "_ID";
@@ -668,7 +677,7 @@ sub Tado_RequestEarlyStartUpdate($)
 
 		my $readTemplate = $url{earlyStart};
 
-		my $passwd = urlEncode($hash->{Password});
+		my $passwd = urlEncode(tado_decrypt($hash->{Password}));
 		my $user = urlEncode($hash->{Username});
 
 		my $ZoneName = "Zone_" . $i . "_ID";
@@ -771,7 +780,7 @@ sub Tado_RequestWeatherUpdate($)
 
 	Log3 $name, 4, "Tado_RequestWeatherUpdate Called. Name: $name";
 	my $readTemplate = $url{getWeather};
-	my $passwd = urlEncode($hash->{Password});
+	my $passwd = urlEncode(tado_decrypt($hash->{Password}));
 	my $user = urlEncode($hash->{Username});
 
 	$readTemplate =~ s/#HomeID#/$hash->{HomeID}/g;
@@ -933,7 +942,7 @@ sub Tado_RequestZoneUpdate($)
 
 		my $readTemplate = $url{"getZoneTemperature"};
 
-		my $passwd = urlEncode($hash->{Password});
+		my $passwd = urlEncode(tado_decrypt($hash->{Password}));
 		my $user = urlEncode($hash->{Username});
 
 		my $ZoneName = "Zone_" . $i . "_ID";
@@ -975,7 +984,7 @@ sub Tado_Write ($$)
 
 		my $readTemplate = $url{"setZoneTemperature"};
 
-		my $passwd = urlEncode($hash->{Password});
+		my $passwd = urlEncode(tado_decrypt($hash->{Password}));
 		my $user = urlEncode($hash->{Username});
 
 		$readTemplate =~ s/#HomeID#/$hash->{HomeID}/g;
@@ -1006,7 +1015,7 @@ sub Tado_Write ($$)
 
 		my $readTemplate = $url{"earlyStart"};
 
-		my $passwd = urlEncode($hash->{Password});
+		my $passwd = urlEncode(tado_decrypt($hash->{Password}));
 		my $user = urlEncode($hash->{Username});
 
 		$readTemplate =~ s/#HomeID#/$hash->{HomeID}/g;
@@ -1035,7 +1044,7 @@ sub Tado_Write ($$)
 	if ($code eq 'Hi')
 	{
 		my $readTemplate = $url{"identifyDevice"};
-		my $passwd = urlEncode($hash->{Password});
+		my $passwd = urlEncode(tado_decrypt($hash->{Password}));
 		my $user = urlEncode($hash->{Username});
 
 		$readTemplate =~ s/#DeviceId#/$zoneID/g;
