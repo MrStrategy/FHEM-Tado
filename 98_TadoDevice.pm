@@ -65,7 +65,6 @@ sub TadoDevice_Define($$)
 
 	#TODO add some validation for SerialNo and ZoneId
 	$hash->{TadoId} = $param[2];
-	setKeyValue(  "TadoDevice_".$hash->{ID}, $param[2] );
 
 	my $iodev;
 	my $i = 0;

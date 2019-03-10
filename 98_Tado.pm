@@ -84,7 +84,6 @@ sub Tado_Define($$)
 	if ( $param[2] =~ /^.+@.+$/ ) {
 		my $username = $param[2];
 		$hash->{Username} = $username;
-		setKeyValue(  "Tado_".$hash->{Username}, $username );
 	} else {
 		$errmsg = "specify valid email address within the field username. Format: define <name> Tado <username> <password> [interval]";
 		Log3 $name, 1, "Tado $name: " . $errmsg;
@@ -93,9 +92,9 @@ sub Tado_Define($$)
 
 	#Take password and use custom encryption.
 	# Encryption is taken from fitbit / withings module
-	my $password = tado_encrypt($param[3]);
+	my $password = $param[3];
+	
 	$hash->{Password} = $password;
-	setKeyValue(  "Tado_".$hash->{Password}, $password );
 
   if (defined $param[4]) {
      $hash->{DEF} = "$hash->{Username} $password $param[4]";
@@ -120,8 +119,6 @@ sub Tado_Define($$)
 
 	if( $interval < 5 ) { $interval = 5; }
 	$hash->{INTERVAL} = $interval;
-	setKeyValue(  "Tado_".$hash->{Interval}, $param[4] );
-
 
 	$hash->{STATE} = "Undefined";
 
@@ -284,7 +281,6 @@ sub Tado_Set($@)
 		Log3 $name, 1, "Tado_Set $name: Set interval to" . $interval;
 
 		$hash->{INTERVAL} = $interval;
-		setKeyValue(  "Tado_".$hash->{Interval}, $param[4] );
 	}
 }
 
