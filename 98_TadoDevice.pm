@@ -288,15 +288,28 @@ sub TadoDevice_Attr(@)
 {
 	my ($cmd,$name,$aName,$aVal) = @_;
 	my $hash = $defs{$name};
+	Log3 $hash, 5, "TadoDevice: $name AttributeChange. CMD: $cmd, name: $aName, value: $aVal.";
 
 	if ($aName eq "earlyStart") {
 		if ($cmd eq "set") {
+     if ($aVal ne 'true' && $aVal ne 'false') {
+			 return "Invalid attribute value. Attribute earlyStart only supports values 'true' and 'false'";
+		 }
 			Log3 $hash, 3, "TadoDevice: $name EarlyStart $aVal.";
 
 			my $ret = IOWrite($hash, "EarlyStart", $hash->{TadoId}, $aVal);
 
 			if ($ret eq "0" or $ret eq "1"){
 				$hash->{EARLY_START} = $aVal;
+				return undef;
+			} else {
+				return $ret;
+			}
+		} elsif ($cmd eq "del"){
+			Log3 $hash, 1, "TadoDevice: $name EarlyStart attribute was deleted. Setting earlyStart to false via Tado web API.";
+			my $ret = IOWrite($hash, "EarlyStart", $hash->{TadoId}, 'false');
+			if ($ret eq "0" or $ret eq "1"){
+				$hash->{EARLY_START} = 'false';
 				return undef;
 			} else {
 				return $ret;
