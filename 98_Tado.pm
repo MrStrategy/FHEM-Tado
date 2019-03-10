@@ -408,7 +408,7 @@ sub Tado_GetZones($)
 
 			} else {
 
-				my $deviceName = "Tado_" . $item->{name};
+				my $deviceName = "Tado_" . makeDeviceName($item->{name});
 				$deviceName =~ s/ /_/g;
 				my $define= "$deviceName TadoDevice $item->{id} IODev=$name";
 
@@ -1052,6 +1052,43 @@ sub Tado_Write ($$)
 
 	return undef;
 }
+
+
+
+ sub tado_encrypt($) {
+   my ($decoded) = @_;
+   my $key = getUniqueId();
+   my $encoded;
+
+   return $decoded if( $decoded =~ /crypt:/ );
+
+   for my $char (split //, $decoded) {
+     my $encode = chop($key);
+     $encoded .= sprintf("%.2x",ord($char)^ord($encode));
+     $key = $encode.$key;
+   }
+
+   return 'crypt:'.$encoded;
+ }
+
+ sub tado_decrypt($) {
+   my ($encoded) = @_;
+   my $key = getUniqueId();
+   my $decoded;
+
+   return $encoded if( $encoded !~ /crypt:/ );
+
+   $encoded = $1 if( $encoded =~ /crypt:(.*)/ );
+
+   for my $char (map { pack('C', hex($_)) } ($encoded =~ /(..)/g)) {
+     my $decode = chop($key);
+     $decoded .= chr(ord($char)^ord($decode));
+     $key = $decode.$key;
+   }
+
+   return $decoded;
+ }
+
 
 
 1;
