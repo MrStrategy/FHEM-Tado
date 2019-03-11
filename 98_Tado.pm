@@ -93,7 +93,7 @@ sub Tado_Define($$)
 	#Take password and use custom encryption.
 	# Encryption is taken from fitbit / withings module
 	my $password = $param[3];
-	
+
 	$hash->{Password} = $password;
 
   if (defined $param[4]) {
@@ -173,16 +173,21 @@ sub Tado_httpSimpleOperation($$$;$)
 	$data = "" if( !$data );
 	Log3 $name, 4, "FHEM -> Tado: " . $url;
 	Log3 $name, 4, "FHEM -> Tado: " . $message if (defined $message);
-	Log3 $name, 4, "Tado -> FHEM: " . $data;
+	Log3 $name, 4, "Tado -> FHEM: " . $data if (defined $data);
+	Log3 $name, 4, "Tado -> FHEM: Got empty response."  if (not defined $data);
 	Log3 $name, 5, '$err: ' . $err;
 	Log3 $name, 5, "method: " . $operation;
 	Log3 $name, 2, "Something gone wrong" if( $data =~ "/tadoMode/" );
 
 	$err = 1 if( $data =~ "/tadoMode/" );
-	if (defined $data and $operation ne 'DELETE') {
-		$decoded  = decode_json($data) if( !$err );
-		Log3 $name, 5, 'Decoded: ' . Dumper($decoded);
-		return $decoded;
+	if (defined $data and (not $data eq '') and $operation ne 'DELETE') {
+		eval {
+			$decoded  = decode_json($data) if( !$err );
+			Log3 $name, 5, 'Decoded: ' . Dumper($decoded);
+			return $decoded;
+		} or do  {
+			Log3 $name, 5, 'Failure decoding: ' . $@;
+		}
 	} else {
 		return undef;
 	}
