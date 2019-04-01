@@ -96,11 +96,11 @@ sub Tado_Define($$)
 
 	$hash->{Password} = $password;
 
-  if (defined $param[4]) {
-     $hash->{DEF} = "$hash->{Username} $password $param[4]";
-	 } else {
+	if (defined $param[4]) {
+		$hash->{DEF} = "$hash->{Username} $password $param[4]";
+	} else {
 		$hash->{DEF} = "$hash->{Username} $password";
-	 }
+	}
 
 	#Check if interval is set and numeric.
 	#If not set -> set to 60 seconds
@@ -645,22 +645,30 @@ sub Tado_UpdateEarlyStartCallback($)
 		return undef;
 	}
 
-	my $d  = decode_json($data) if( !$err );
-	Log3 $name, 5, 'Decoded: ' . Dumper($d);
+	eval {
+		my $d  = decode_json($data) if( !$err );
+		Log3 $name, 5, 'Decoded: ' . Dumper($d);
 
-	if (defined $d && ref($d) eq "HASH" && defined $d->{errors}){
-		log 1, Dumper $d;
-		$hash->{STATE} = "Error: $d->{errors}[0]->{code} / $d->{errors}[0]->{title}";
+
+
+		if (defined $d && ref($d) eq "HASH" && defined $d->{errors}){
+			log 1, Dumper $d;
+			$hash->{STATE} = "Error: $d->{errors}[0]->{code} / $d->{errors}[0]->{title}";
+			return undef;
+		}
+
+		my $message = "Tado;$param->{zoneID};earlyStart;$d->{enabled}";
+
+		Log3 $name, 4, "$name: trying to dispatch message: $message";
+		my $found = Dispatch($hash, $message);
+		Log3 $name, 4, "$name: tried to dispatch message. Result: $found";
+
+		return undef;
+
+	} or do  {
+		Log3 $name, 5, 'Failure decoding: ' . $@;
 		return undef;
 	}
-
-	my $message = "Tado;$param->{zoneID};earlyStart;$d->{enabled}";
-
-	Log3 $name, 4, "$name: trying to dispatch message: $message";
-	my $found = Dispatch($hash, $message);
-	Log3 $name, 4, "$name: tried to dispatch message. Result: $found";
-
-	return undef;
 }
 
 
@@ -733,32 +741,38 @@ sub Tado_UpdateWeatherCallback($)
 		return undef;
 	}
 
-	my $d  = decode_json($data) if( !$err );
-	Log3 $name, 5, 'Decoded: ' . Dumper($d);
+	eval {
+		my $d  = decode_json($data) if( !$err );
+		Log3 $name, 5, 'Decoded: ' . Dumper($d);
 
-	if (defined $d && ref($d) eq "HASH" && defined $d->{errors}){
-		log 1, Dumper $d;
-		$hash->{STATE} = "Error: $d->{errors}[0]->{code} / $d->{errors}[0]->{title}";
+		if (defined $d && ref($d) eq "HASH" && defined $d->{errors}){
+			log 1, Dumper $d;
+			$hash->{STATE} = "Error: $d->{errors}[0]->{code} / $d->{errors}[0]->{title}";
+			return undef;
+		}
+
+		my $message = "Tado;weather;weather;"
+		. $d->{solarIntensity}->{percentage} . ";"
+		. $d->{solarIntensity}->{timestamp} . ";"
+		. $d->{outsideTemperature}->{celsius} . ";"
+		. $d->{outsideTemperature}->{timestamp} . ";"
+		. $d->{weatherState}->{value} . ";"
+		. $d->{weatherState}->{timestamp};
+
+		Log3 $name, 4, "$name: trying to dispatch message: $message";
+		my $found = Dispatch($hash, $message);
+		Log3 $name, 4, "$name: tried to dispatch message. Result: $found";
+
+		readingsBeginUpdate($hash);
+		readingsBulkUpdate($hash, "LastUpdate", localtime );
+		readingsEndUpdate($hash, 1);
+
+		return undef;
+	} or do  {
+		Log3 $name, 5, 'Failure decoding: ' . $@;
 		return undef;
 	}
 
-	my $message = "Tado;weather;weather;"
-	. $d->{solarIntensity}->{percentage} . ";"
-	. $d->{solarIntensity}->{timestamp} . ";"
-	. $d->{outsideTemperature}->{celsius} . ";"
-	. $d->{outsideTemperature}->{timestamp} . ";"
-	. $d->{weatherState}->{value} . ";"
-	. $d->{weatherState}->{timestamp};
-
-	Log3 $name, 4, "$name: trying to dispatch message: $message";
-	my $found = Dispatch($hash, $message);
-	Log3 $name, 4, "$name: tried to dispatch message. Result: $found";
-
-	readingsBeginUpdate($hash);
-	readingsBulkUpdate($hash, "LastUpdate", localtime );
-	readingsEndUpdate($hash, 1);
-
-	return undef;
 }
 
 
@@ -831,83 +845,91 @@ sub Tado_UpdateZoneCallback($)
 		return undef;
 	}
 
-	my $d  = decode_json($data) if( !$err );
-	Log3 $name, 5, 'Decoded: ' . Dumper($d);
+	eval {
+		my $d  = decode_json($data) if( !$err );
+		Log3 $name, 5, 'Decoded: ' . Dumper($d);
 
-	if (defined $d && ref($d) eq "HASH" && defined $d->{errors}){
-		log 1, Dumper $d;
-		$hash->{STATE} = "Error: $d->{errors}[0]->{code} / $d->{errors}[0]->{title}";
+
+
+
+		if (defined $d && ref($d) eq "HASH" && defined $d->{errors}){
+			log 1, Dumper $d;
+			$hash->{STATE} = "Error: $d->{errors}[0]->{code} / $d->{errors}[0]->{title}";
+			return undef;
+		}
+
+		my $overlay =  defined $d->{overlay} ? 1 : 0;
+
+		my $message = "Tado;$param->{zoneID};temp;"
+		#measured-temp
+		. $d->{sensorDataPoints}->{insideTemperature}->{celsius} . ";"
+		#measured-temp-timestamp
+		. $d->{sensorDataPoints}->{insideTemperature}->{timestamp} . ";"
+		#measured-temp-fahrenheit
+		. $d->{sensorDataPoints}->{insideTemperature}->{fahrenheit} . ";"
+		#measured-temp-precision
+		. $d->{sensorDataPoints}->{insideTemperature}->{precision}->{celsius} . ";"
+		#measured-temp-precision-fahrenheit
+		. $d->{sensorDataPoints}->{insideTemperature}->{precision}->{fahrenheit} . ";"
+		#desired-temp
+		. $d->{setting}->{temperature}->{celsius}. ";"
+
+		#measured-humidity
+		. $d->{sensorDataPoints}->{humidity}->{percentage} . ";"
+		#measured-humidity-timestamp
+		. $d->{sensorDataPoints}->{humidity}->{timestamp} . ";"
+		#link
+		. $d->{link}->{state} . ";"
+		#open-window
+		. $d->{openWindow} . ";"
+		#heating-percentage
+		. $d->{activityDataPoints}->{heatingPower}->{percentage} . ";"
+		#heating-percentage-timestamp
+		. $d->{activityDataPoints}->{heatingPower}->{timestamp} . ";"
+
+
+		#nextScheduleChange-temperature
+		. $d->{nextScheduleChange}->{setting}->{temperature}->{celsius} . ";"
+		#nextScheduleChange-power
+		. $d->{nextScheduleChange}->{setting}->{power} . ";"
+		#nextScheduleChange-start
+		. $d->{nextScheduleChange}->{start} . ";"
+
+
+		#overlay-active
+		. $overlay;
+
+		if ($overlay) {
+			$message .= ";"
+			#overlay-mode
+			. $d->{overlay}->{type} . ";"
+			#overlay-power
+			. $d->{overlay}->{setting}->{power} . ";"
+			#overlay-desired-temperature
+			. $d->{overlay}->{setting}->{temperature}->{celsius} . ";"
+			#overlay-termination-mode
+			. $d->{overlay}->{termination}->{type} . ";"
+			#overlay-termination-durationInSeconds
+			. $d->{overlay}->{termination}->{durationInSeconds} . ";"
+			#overlay-overlay-termination-expiry
+			. $d->{overlay}->{termination}->{expiry} . ";"
+			#overlay-overlay-termination-remainingTimeInSeconds
+			. $d->{overlay}->{termination}->{remainingTimeInSeconds};
+		}
+
+		Log3 $name, 4, "$name: trying to dispatch message: $message";
+		my $found = Dispatch($hash, $message);
+		Log3 $name, 4, "$name: tried to dispatch message. Result: $found";
+
+		readingsBeginUpdate($hash);
+		readingsBulkUpdate($hash, "LastUpdate", localtime );
+		readingsEndUpdate($hash, 1);
+
+		return undef;
+	} or do  {
+		Log3 $name, 5, 'Failure decoding: ' . $@;
 		return undef;
 	}
-
-	my $overlay =  defined $d->{overlay} ? 1 : 0;
-
-	my $message = "Tado;$param->{zoneID};temp;"
-	#measured-temp
-	. $d->{sensorDataPoints}->{insideTemperature}->{celsius} . ";"
-	#measured-temp-timestamp
-	. $d->{sensorDataPoints}->{insideTemperature}->{timestamp} . ";"
-	#measured-temp-fahrenheit
-	. $d->{sensorDataPoints}->{insideTemperature}->{fahrenheit} . ";"
-	#measured-temp-precision
-	. $d->{sensorDataPoints}->{insideTemperature}->{precision}->{celsius} . ";"
-	#measured-temp-precision-fahrenheit
-	. $d->{sensorDataPoints}->{insideTemperature}->{precision}->{fahrenheit} . ";"
-	#desired-temp
-	. $d->{setting}->{temperature}->{celsius}. ";"
-
-	#measured-humidity
-	. $d->{sensorDataPoints}->{humidity}->{percentage} . ";"
-	#measured-humidity-timestamp
-	. $d->{sensorDataPoints}->{humidity}->{timestamp} . ";"
-	#link
-	. $d->{link}->{state} . ";"
-	#open-window
-	. $d->{openWindow} . ";"
-	#heating-percentage
-	. $d->{activityDataPoints}->{heatingPower}->{percentage} . ";"
-	#heating-percentage-timestamp
-	. $d->{activityDataPoints}->{heatingPower}->{timestamp} . ";"
-
-
-	#nextScheduleChange-temperature
-	. $d->{nextScheduleChange}->{setting}->{temperature}->{celsius} . ";"
-	#nextScheduleChange-power
-	. $d->{nextScheduleChange}->{setting}->{power} . ";"
-	#nextScheduleChange-start
-	. $d->{nextScheduleChange}->{start} . ";"
-
-
-	#overlay-active
-	. $overlay;
-
-	if ($overlay) {
-		$message .= ";"
-		#overlay-mode
-		. $d->{overlay}->{type} . ";"
-		#overlay-power
-		. $d->{overlay}->{setting}->{power} . ";"
-		#overlay-desired-temperature
-		. $d->{overlay}->{setting}->{temperature}->{celsius} . ";"
-		#overlay-termination-mode
-		. $d->{overlay}->{termination}->{type} . ";"
-		#overlay-termination-durationInSeconds
-		. $d->{overlay}->{termination}->{durationInSeconds} . ";"
-		#overlay-overlay-termination-expiry
-		. $d->{overlay}->{termination}->{expiry} . ";"
-		#overlay-overlay-termination-remainingTimeInSeconds
-		. $d->{overlay}->{termination}->{remainingTimeInSeconds};
-	}
-
-	Log3 $name, 4, "$name: trying to dispatch message: $message";
-	my $found = Dispatch($hash, $message);
-	Log3 $name, 4, "$name: tried to dispatch message. Result: $found";
-
-	readingsBeginUpdate($hash);
-	readingsBulkUpdate($hash, "LastUpdate", localtime );
-	readingsEndUpdate($hash, 1);
-
-	return undef;
 }
 
 
@@ -1065,39 +1087,39 @@ sub Tado_Write ($$)
 
 
 
- sub tado_encrypt($) {
-   my ($decoded) = @_;
-   my $key = getUniqueId();
-   my $encoded;
+sub tado_encrypt($) {
+	my ($decoded) = @_;
+	my $key = getUniqueId();
+	my $encoded;
 
-   return $decoded if( $decoded =~ /crypt:/ );
+	return $decoded if( $decoded =~ /crypt:/ );
 
-   for my $char (split //, $decoded) {
-     my $encode = chop($key);
-     $encoded .= sprintf("%.2x",ord($char)^ord($encode));
-     $key = $encode.$key;
-   }
+	for my $char (split //, $decoded) {
+		my $encode = chop($key);
+		$encoded .= sprintf("%.2x",ord($char)^ord($encode));
+		$key = $encode.$key;
+	}
 
-   return 'crypt:'.$encoded;
- }
+	return 'crypt:'.$encoded;
+}
 
- sub tado_decrypt($) {
-   my ($encoded) = @_;
-   my $key = getUniqueId();
-   my $decoded;
+sub tado_decrypt($) {
+	my ($encoded) = @_;
+	my $key = getUniqueId();
+	my $decoded;
 
-   return $encoded if( $encoded !~ /crypt:/ );
+	return $encoded if( $encoded !~ /crypt:/ );
 
-   $encoded = $1 if( $encoded =~ /crypt:(.*)/ );
+	$encoded = $1 if( $encoded =~ /crypt:(.*)/ );
 
-   for my $char (map { pack('C', hex($_)) } ($encoded =~ /(..)/g)) {
-     my $decode = chop($key);
-     $decoded .= chr(ord($char)^ord($decode));
-     $key = $decode.$key;
-   }
+	for my $char (map { pack('C', hex($_)) } ($encoded =~ /(..)/g)) {
+		my $decode = chop($key);
+		$decoded .= chr(ord($char)^ord($decode));
+		$key = $decode.$key;
+	}
 
-   return $decoded;
- }
+	return $decoded;
+}
 
 
 
