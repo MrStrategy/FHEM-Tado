@@ -19,6 +19,7 @@ update => " ",
 home	=> " ",
 zones	=> " ",
 devices  => " ",
+mobile_devices  => " ",
 weather => " "
 );
 
@@ -34,6 +35,7 @@ setZoneTemperature     => 'https://my.tado.com/api/v2/homes/#HomeID#/zones/#Zone
 earlyStart             => 'https://my.tado.com/api/v2/homes/#HomeID#/zones/#ZoneID#/earlyStart?username=#Username#&password=#Password#',
 getZoneDetails         => 'https://my.tado.com/api/v2/homes/#HomeID#/zones?username=#Username#&password=#Password#' ,
 getHomeId              => 'https://my.tado.com/api/v2/me?username=#Username#&password=#Password#',
+getMobileDevices       => 'https://my.tado.com/api/v2/me?username=#Username#&password=#Password#',
 getHomeDetails         =>  'https://my.tado.com/api/v2/homes/#HomeID#?username=#Username#&password=#Password#',
 getWeather             =>  'https://my.tado.com/api/v2/homes/#HomeID#/weather?username=#Username#&password=#Password#',
 getDevices             =>  'https://my.tado.com/api/v2/homes/#HomeID#/devices?username=#Username#&password=#Password#',
@@ -56,6 +58,7 @@ sub Tado_Initialize($)
 	$hash->{MatchList} = { '1:TadoDevice'  => '^Tado;.*'};
 	$hash->{AttrList} =
 	'generateDevices:yes,no '
+	.	'generateMobileDevices:yes,no '
 	. 'generateWeather:yes,no '
 	. $readingFnAttributes;
 
@@ -123,10 +126,11 @@ sub Tado_Define($$)
 	$hash->{STATE} = "Undefined";
 
 	$attr{$name}{generateDevices} = "no" if( !defined( $attr{$name}{generateDevices} ) );
+	$attr{$name}{generateMobileDevices} = "no" if( !defined( $attr{$name}{generateMobileDevices} ) );
 	$attr{$name}{generateWeather} = "no" if( !defined( $attr{$name}{generateWeather} ) );
 
 	#Initial load of the homes
-	Tado_GetHomes($hash);
+	Tado_GetHomesAndDevices($hash);
 
 	RemoveInternalTimer($hash);
 
@@ -136,7 +140,8 @@ sub Tado_Define($$)
 
 	Log3 $name, 5, "Tado_Define $name: Starting timer with Interval $hash->{INTERVAL}";
 	InternalTimer(gettimeofday()+$hash->{INTERVAL}, "Tado_RequestZoneUpdate", $hash) if (defined $hash);
-
+	InternalTimer(gettimeofday()+$hash->{INTERVAL}, "Tado_RequestWeatherUpdate", $hash) if (defined $hash);
+	InternalTimer(gettimeofday()+$hash->{INTERVAL}, "Tado_RequestMobileDeviceUpdate", $hash) if (defined $hash);
 	return undef;
 }
 
@@ -211,7 +216,7 @@ sub Tado_Get($@)
 
 	if($opt eq "home"){
 
-		return Tado_GetHomes($hash);
+		return Tado_GetHomesAndDevices($hash);
 
 	} elsif($opt eq "zones") {
 
@@ -221,11 +226,17 @@ sub Tado_Get($@)
 
 		return Tado_GetDevices($hash);
 
+	}  elsif($opt eq "mobile_devices") {
+
+		return Tado_GetMobileDevices($hash);
+
 	}  elsif($opt eq "update")  {
 
 		Log3 $name, 3, "Tado_Get $name: Updating readings for all zones";
 		$hash->{LOCAL} = 1;
 		Tado_RequestZoneUpdate($hash);
+		Tado_RequestWeatherUpdate($hash);
+		Tado_RequestMobileDeviceUpdate($hash);
 		delete $hash->{LOCAL};
 
 	}  elsif($opt eq "weather")  {
@@ -295,14 +306,13 @@ sub Tado_Attr(@)
 	return undef;
 }
 
-
-sub Tado_GetHomes($)
+sub Tado_GetHomesAndDevices($)
 {
 	my ($hash) = @_;
 	my $name = $hash->{NAME};
 
 	if (not defined $hash){
-		my $msg = "Error on Tado_GetHomes. Missing hash variable";
+		my $msg = "Error on Tado_GetHomesAndDevices. Missing hash variable";
 		Log3 'Tado', 1, $msg;
 		return $msg;
 	}
@@ -343,6 +353,24 @@ sub Tado_GetHomes($)
 
 			$hash->{HomeID_2} = $d->{homes}[1]->{id};
 			$hash->{HomeName_2} = $d->{homes}[1]->{name};
+			Log3 $name, 1, "New Tado Home defined. Id: $hash->{HomeID_2} Name: $hash->{HomeName_2}";
+		}
+
+		if (scalar (@{$d->{mobileDevices}}) > 0 ){
+			readingsBeginUpdate($hash);
+			for (my $mobileDeviceCounter = 0; $mobileDeviceCounter < scalar (@{$d->{mobileDevices}}); $mobileDeviceCounter++){
+				my $deviceId_Fieldname = "MobileDevice_".$mobileDeviceCounter."_id";
+				my $deviceName_Fieldname = "MobileDevice_".$mobileDeviceCounter."_Name";
+				readingsBulkUpdate($hash, $deviceId_Fieldname, $d->{mobileDevices}[$mobileDeviceCounter]->{id} );
+				readingsBulkUpdate($hash, $deviceName_Fieldname , makeDeviceName($d->{mobileDevices}[$mobileDeviceCounter]->{name}));
+
+
+				$hash->{$deviceId_Fieldname} = $d->{mobileDevices}[$mobileDeviceCounter]->{id};
+				$hash->{$deviceName_Fieldname} = makeDeviceName($d->{mobileDevices}[$mobileDeviceCounter]->{name});
+
+				Log3 $name, 1, "New Tado Device defined. Id: $hash->{$deviceId_Fieldname} Name: $hash->{$deviceName_Fieldname}";
+			}
+			readingsEndUpdate($hash, 1);
 		}
 
 		$hash->{STATE} = 'Initialized';
@@ -350,7 +378,6 @@ sub Tado_GetHomes($)
 	}
 
 }
-
 
 sub Tado_GetZones($)
 {
@@ -446,13 +473,19 @@ sub Tado_GetZones($)
 
 }
 
-
 sub Tado_GetDevices($)
 {
 
 	my ($hash) = @_;
 	my $name = $hash->{NAME};
 
+
+	my $isEnabled = AttrVal($name, 'generateDevices', 'yes');
+	if ($isEnabled eq 'no') {
+		my $msg = "Attribute 'generateDevices' is set to no. Command will not be executed.";
+		Log3 'Tado', 1, $msg;
+		return $msg;
+	}
 
 	my $readTemplate = $url{"getDevices"};
 
@@ -531,6 +564,82 @@ sub Tado_GetDevices($)
 	}
 }
 
+sub Tado_GetMobileDevices($)
+{
+
+	my ($hash) = @_;
+	my $name = $hash->{NAME};
+
+	my $isEnabled = AttrVal($name, 'generateMobileDevices', 'yes');
+	if ($isEnabled eq 'no') {
+		my $msg = "Attribute 'generateMobileDevices' is set to no. Command 'getMobileDevices' cannot be executed.";
+		Log3 'Tado', 1, $msg;
+		return $msg;
+	}
+
+	my $readTemplate = $url{"getMobileDevices"};
+
+	my $passwd = urlEncode(tado_decrypt($hash->{Password}));
+	my $user = urlEncode($hash->{Username});
+
+	$readTemplate =~ s/#Username#/$user/g;
+	$readTemplate =~ s/#Password#/$passwd/g;
+
+
+	my $d = Tado_httpSimpleOperation( $hash , $readTemplate, 'GET'  );
+
+	if (defined $d && ref($d) eq "HASH" && defined $d->{errors}){
+		log 1, Dumper $d;
+		$hash->{STATE} = "Error: $d->{errors}[0]->{code} / $d->{errors}[0]->{title}";
+		return undef;
+
+	} else {
+
+
+		readingsBeginUpdate($hash);
+
+		my $count = 0;
+		for my $item( @{$d->{mobileDevices}} ){
+			$count++;
+			$hash->{MobileDevices} = $item->{$count};
+
+			my $code = $name ."-". $item->{id};
+
+			if( defined($modules{TadoDevice}{defptr}{$code}) )
+			{
+				Log3 $name, 5, "Tado_GetMobileDevices ($name): mobiledevice id '$item->{id}' already defined as '$modules{TadoDevice}{defptr}{$code}->{NAME}'";
+			} else {
+
+				my $deviceName = "Tado_" . $item->{name};
+				$deviceName =~ s/ /_/g;
+				my $define= "$deviceName TadoDevice $item->{id} IODev=$name";
+
+				Log3 $name, 1, "Tado_GetMobileDevices ($name): create new device '$deviceName'";
+
+				my $cmdret= CommandDefine(undef,$define);
+
+				if(defined $cmdret) {
+					if( not index($cmdret, 'already defined') != -1) {
+						Log3 $name, 1, "$name: Autocreate: An error occurred while creating device for id '$item->{name}': $cmdret";
+					}
+				} else {
+
+					my $deviceHash = $modules{TadoDevice}{defptr}{$code};
+
+					CommandAttr(undef,"$deviceName room Tado");
+					CommandAttr(undef,"$deviceName subType mobile_device");
+					$deviceHash->{device_platform} = $item->{deviceMetadata}->{platform};
+					$deviceHash->{device_osVersion} = $item->{deviceMetadata}->{osVersion};
+					$deviceHash->{device_locale} = $item->{deviceMetadata}->{locale};
+					$deviceHash->{device_model} = $item->{deviceMetadata}->{model};
+				}
+			}
+		}
+	}
+	readingsEndUpdate($hash, 1);
+	Tado_RequestMobileDeviceUpdate($hash);
+	return undef;
+}
 
 sub Tado_DefineWeatherChannel($)
 {
@@ -550,6 +659,18 @@ sub Tado_DefineWeatherChannel($)
 		return $msg;
 
 	}
+
+	my $isEnabled = AttrVal($name, 'generateWeather', 'yes');
+	if ($isEnabled eq 'no') {
+		my $msg = "Attribute 'generateWeather' is set to no. Command will not be executed.";
+		Log3 'Tado', 1, $msg;
+		return $msg;
+	}
+
+
+
+
+
 
 	my $code = $name ."-weather";
 
@@ -581,7 +702,6 @@ sub Tado_DefineWeatherChannel($)
 	}
 	return undef;
 }
-
 
 sub Tado_GetEarlyStart($)
 {
@@ -617,7 +737,6 @@ sub Tado_GetEarlyStart($)
 	}
 	return undef;
 }
-
 
 sub Tado_UpdateEarlyStartCallback($)
 {
@@ -671,7 +790,6 @@ sub Tado_UpdateEarlyStartCallback($)
 	}
 }
 
-
 sub Tado_RequestEarlyStartUpdate($)
 {
 	my ($hash) = @_;
@@ -712,8 +830,6 @@ sub Tado_RequestEarlyStartUpdate($)
 		HttpUtils_NonblockingGet($request);
 	}
 }
-
-
 
 sub Tado_UpdateWeatherCallback($)
 {
@@ -775,6 +891,72 @@ sub Tado_UpdateWeatherCallback($)
 
 }
 
+sub Tado_UpdateMobileDeviceCallback($)
+{
+	my ($param, $err, $data) = @_;
+	my $hash = $param->{hash};
+	my $name = $hash->{NAME};
+
+	if($err ne "")                                                                                                      # wenn ein Fehler bei der HTTP Abfrage aufgetreten ist
+	{
+		Log3 $name, 3, "error while requesting ".$param->{url}." - $err";                                               # Eintrag fürs Log
+		readingsSingleUpdate($hash, "fullResponse", "ERROR", 0);
+		return undef;
+	}
+
+	Log3 $name, 2, "Received non-blocking data from TADO for mobile devices.";
+
+	Log3 $name, 4, "FHEM -> Tado: " . $param->{url};
+	Log3 $name, 4, "FHEM -> Tado: " . $param->{message} if (defined $param->{message});
+	Log3 $name, 4, "Tado -> FHEM: " . $data;
+	Log3 $name, 5, '$err: ' . $err;
+	Log3 $name, 5, "method: " . $param->{method};
+	Log3 $name, 2, "Something gone wrong" if( $data =~ "/tadoMode/" );
+
+	if (!defined($data) or $param->{method} eq 'DELETE') {
+		return undef;
+	}
+
+	eval {
+		my $d  = decode_json($data) if( !$err );
+		Log3 $name, 5, 'Decoded: ' . Dumper($d);
+
+		if (defined $d && ref($d) eq "HASH" && defined $d->{errors}){
+			log 1, Dumper $d;
+			$hash->{STATE} = "Error: $d->{errors}[0]->{code} / $d->{errors}[0]->{title}";
+			return undef;
+		}
+
+		for my $item( @{$d->{mobileDevices}} ){
+
+			my $message = "Tado;$item->{id};locationdata;"
+			. $item->{settings}->{geoTrackingEnabled}. ";"
+			. $item->{location}->{stale}. ";"
+			. $item->{location}->{atHome}. ";"
+			. $item->{location}->{bearingFromHome}->{degrees}. ";"
+			. $item->{location}->{bearingFromHome}->{radians}. ";"
+			. $item->{location}->{relativeDistanceFromHomeFence}. ";"
+			. $item->{settings}->{pushNotifications}->{lowBatteryReminder}. ";"
+			. $item->{settings}->{pushNotifications}->{awayModeReminder}. ";"
+			. $item->{settings}->{pushNotifications}->{homeModeReminder}. ";"
+			. $item->{settings}->{pushNotifications}->{openWindowReminder}. ";"
+			. $item->{settings}->{pushNotifications}->{energySavingsReportReminder};
+
+			Log3 $name, 4, "$name: trying to dispatch message: $message";
+			my $found = Dispatch($hash, $message);
+			Log3 $name, 4, "$name: tried to dispatch message. Result: $found";
+		}
+		readingsBeginUpdate($hash);
+		readingsBulkUpdate($hash, "LastUpdate_MobileDevices", localtime );
+		readingsEndUpdate($hash, 1);
+
+		return undef;
+	} or do  {
+		Log3 $name, 5, 'Failure decoding: ' . $@;
+		return undef;
+	}
+
+}
 
 sub Tado_RequestWeatherUpdate($)
 {
@@ -785,6 +967,14 @@ sub Tado_RequestWeatherUpdate($)
 		Log3 'Tado', 1, "Error on Tado_GetWeather. Missing hash variable";
 		return undef;
 	}
+
+	my $isEnabled = AttrVal($name, 'generateWeather', 'yes');
+	if ($isEnabled eq 'no') {
+		my $msg = "Attribute 'generateWeather' is set to no. Update will not be executed.";
+		Log3 'Tado', 4, $msg;
+		return undef;
+	}
+
 
 	my $code = $name ."-weather";
 
@@ -818,6 +1008,48 @@ sub Tado_RequestWeatherUpdate($)
 
 }
 
+sub Tado_RequestMobileDeviceUpdate($)
+{
+	my ($hash) = @_;
+	my $name = $hash->{NAME};
+
+	if (not defined $hash){
+		Log3 'Tado', 1, "Error on Tado_RequestMobileDeviceUpdate. Missing hash variable";
+		return undef;
+	}
+
+
+	my $isEnabled = AttrVal($name, 'generateMobileDevices', 'yes');
+	if ($isEnabled eq 'no') {
+		my $msg = "Attribute 'generateMobileDevices' is set to no. No update will be executed.";
+		Log3 'Tado', 3, $msg;
+		return undef;
+	}
+
+
+	Log3 $name, 4, "Tado_RequestMobileDeviceUpdate Called. Name: $name";
+	my $readTemplate = $url{getMobileDevices};
+	my $passwd = urlEncode(tado_decrypt($hash->{Password}));
+	my $user = urlEncode($hash->{Username});
+
+	$readTemplate =~ s/#Username#/$user/g;
+	$readTemplate =~ s/#Password#/$passwd/g;
+
+	my $request = {
+		url           => $readTemplate,
+		header        => "Content-Type:application/json;charset=UTF-8",
+		method        => 'GET',
+		timeout       =>  2,
+		hideurl       =>  1,
+		callback      => \&Tado_UpdateMobileDeviceCallback,
+		hash          => $hash
+	};
+
+	Log3 $name, 5, 'NonBlocking Request: ' . Dumper($request);
+
+	HttpUtils_NonblockingGet($request);
+
+}
 
 sub Tado_UpdateZoneCallback($)
 {
@@ -932,7 +1164,6 @@ sub Tado_UpdateZoneCallback($)
 	}
 }
 
-
 sub Tado_RequestZoneUpdate($)
 {
 	my ($hash) = @_;
@@ -993,7 +1224,6 @@ sub Tado_RequestZoneUpdate($)
 	}
 
 }
-
 
 sub Tado_Write ($$)
 {
@@ -1062,6 +1292,7 @@ sub Tado_Write ($$)
 		Tado_RequestZoneUpdate($hash);
 		Tado_RequestEarlyStartUpdate($hash);
 		Tado_RequestWeatherUpdate($hash);
+		Tado_RequestMobileDeviceUpdate($hash);
 	}
 
 	if ($code eq 'Hi')

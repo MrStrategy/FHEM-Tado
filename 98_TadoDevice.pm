@@ -39,7 +39,7 @@ sub TadoDevice_Initialize($)
 	$hash->{ReadFn}     = 'TadoDevice_Read';
 	$hash->{AttrList} =
 	'earlyStart:true,false '
-	. 'subType:zone,bridge,thermostat,weather '
+	. 'subType:zone,bridge,thermostat,weather,mobile_device '
 	. $readingFnAttributes;
 	$hash->{Match} = "^Tado;.*" ;
 
@@ -200,6 +200,25 @@ sub TadoDevice_Parse ($$)
 			readingsEndUpdate($hash, 1);
 
 			$hash->{STATE} = sprintf("T: %.1f &deg;C Solar: %.1f%<br>%s", $values[5], $values[3], $values[7]);
+		} elsif ($values[2] eq 'locationdata') {
+			readingsBeginUpdate($hash);
+
+			readingsBulkUpdate($hash, "geoTrackingEnabled", $values[3] );
+			readingsBulkUpdate($hash, "location_stale", $values[4] );
+			readingsBulkUpdate($hash, "location_atHome", $values[5] );
+			readingsBulkUpdate($hash, "bearingFromHome_degrees", $values[6] );
+			readingsBulkUpdate($hash, "bearingFromHome_radians", $values[7] );
+			readingsBulkUpdate($hash, "location_relativeDistanceFromHomeFence", $values[8] );
+
+			readingsBulkUpdate($hash, "pushNotification_LowBatteryReminder", $values[9] );
+			readingsBulkUpdate($hash, "pushNotification_awayModeReminder", $values[10] );
+			readingsBulkUpdate($hash, "pushNotification_homeModeReminder", $values[11] );
+			readingsBulkUpdate($hash, "pushNotification_openWindowReminder", $values[12] );
+			readingsBulkUpdate($hash, "pushNotification_energySavingsReportReminder", $values[13] );
+
+			readingsEndUpdate($hash, 1);
+
+			$hash->{STATE} = sprintf("Tracking: %s Home: %s", $values[3], $values[5]);
 		}
 
 		# Rückgabe des Gerätenamens, für welches die Nachricht bestimmt ist.
@@ -292,9 +311,9 @@ sub TadoDevice_Attr(@)
 
 	if ($aName eq "earlyStart") {
 		if ($cmd eq "set") {
-     if ($aVal ne 'true' && $aVal ne 'false') {
-			 return "Invalid attribute value. Attribute earlyStart only supports values 'true' and 'false'";
-		 }
+			if ($aVal ne 'true' && $aVal ne 'false') {
+				return "Invalid attribute value. Attribute earlyStart only supports values 'true' and 'false'";
+			}
 			Log3 $hash, 3, "TadoDevice: $name EarlyStart $aVal.";
 
 			my $ret = IOWrite($hash, "EarlyStart", $hash->{TadoId}, $aVal);
