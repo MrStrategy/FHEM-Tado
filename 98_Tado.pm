@@ -139,9 +139,7 @@ sub Tado_Define($$)
 	InternalTimer(gettimeofday()+15, "Tado_GetZones", $hash) if (defined $hash);
 
 	Log3 $name, 5, "Tado_Define $name: Starting timer with Interval $hash->{INTERVAL}";
-	InternalTimer(gettimeofday()+$hash->{INTERVAL}, "Tado_RequestZoneUpdate", $hash) if (defined $hash);
-	InternalTimer(gettimeofday()+$hash->{INTERVAL}, "Tado_RequestWeatherUpdate", $hash) if (defined $hash);
-	InternalTimer(gettimeofday()+$hash->{INTERVAL}, "Tado_RequestMobileDeviceUpdate", $hash) if (defined $hash);
+	InternalTimer(gettimeofday()+$hash->{INTERVAL}, "Tado_UpdateDueToTimer", $hash) if (defined $hash);
 	return undef;
 }
 
@@ -275,7 +273,7 @@ sub Tado_Set($@)
 		Tado_RequestZoneUpdate($hash);
 		delete $hash->{LOCAL};
 
-		InternalTimer(gettimeofday()+$hash->{INTERVAL}, "Tado_RequestZoneUpdate", $hash);
+		InternalTimer(gettimeofday()+$hash->{INTERVAL}, "Tado_UpdateDueToTimer", $hash);
 
 		Log3 $name, 1, "Tado_Set $name: Updated readings and started timer to automatically update readings with interval $hash->{INTERVAL}";
 
@@ -1164,6 +1162,28 @@ sub Tado_UpdateZoneCallback($)
 	}
 }
 
+sub Tado_UpdateDueToTimer($)
+{
+
+	my ($hash) = @_;
+	my $name = $hash->{NAME};
+
+	#local allows call of function without adding new timer.
+	#must be set before call ($hash->{LOCAL} = 1) and removed after (delete $hash->{LOCAL};)
+	if(!$hash->{LOCAL}) {
+		RemoveInternalTimer($hash);
+		#Log3 "Test", 1, Dumper($hash);
+		InternalTimer(gettimeofday()+$hash->{INTERVAL}, "Tado_UpdateDueToTimer", $hash);
+		$hash->{STATE} = 'Polling';
+	}
+
+  Tado_RequestZoneUpdate($hash);
+	Tado_RequestMobileDeviceUpdate($hash);
+	Tado_RequestWeatherUpdate($hash);
+
+}
+
+
 sub Tado_RequestZoneUpdate($)
 {
 	my ($hash) = @_;
@@ -1181,14 +1201,7 @@ sub Tado_RequestZoneUpdate($)
 
 	Log3 $name, 4, "Tado_RequestZoneUpdate Called for non-blocking value update. Name: $name";
 
-	#local allows call of function without adding new timer.
-	#must be set before call ($hash->{LOCAL} = 1) and removed after (delete $hash->{LOCAL};)
-	if(!$hash->{LOCAL}) {
-		RemoveInternalTimer($hash);
-		#Log3 "Test", 1, Dumper($hash);
-		InternalTimer(gettimeofday()+$hash->{INTERVAL}, "Tado_RequestZoneUpdate", $hash);
-		$hash->{STATE} = 'Polling';
-	}
+
 
 	Log3 $name, 3, "Getting update for $hash->{Zones} zones.";
 
