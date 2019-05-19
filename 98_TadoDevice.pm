@@ -8,6 +8,7 @@ update	=> " "
 
 my %TadoDevice_zone_sets = (
 automatic             => ' ',
+off       	          => " ",
 temperature	          => " ",
 'temperature-for-60'	=> " ",
 'temperature-for-90'	=> " ",
@@ -283,6 +284,8 @@ sub TadoDevice_Set($@)
 
 	if ($opt eq "automatic")	{
 		IOWrite($hash, "Temp", $hash->{TadoId}, "Auto");
+	} elsif ($opt eq "off")	{
+		IOWrite($hash, "Temp", $hash->{TadoId}, "0" , "off");
 	} elsif ($opt eq "temperature")	{
 		IOWrite($hash, "Temp", $hash->{TadoId}, "0" , shift @param);
 	} elsif ($opt eq "temperature-for-60")	{

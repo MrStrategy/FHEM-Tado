@@ -1258,14 +1258,25 @@ sub Tado_Write ($$)
 		$readTemplate =~ s/#Username#/$user/g;
 		$readTemplate =~ s/#Password#/$passwd/g;
 
+
 		my %message ;
 		$message{'setting'}{'type'} = "HEATING";
-		$message{'setting'}{'power'} = 'ON';
-		$message{'setting'}{'temperature'} {'celsius'} =  $temperature + 0 ;
-		$message{'termination'}{'type'}  = 'TIMER';
-		$message{'termination'}{'durationInSeconds'} = $duration * 60;
 
-		if ($duration eq "0") {$message{'termination'}{'type'}  = 'MANUAL';}
+
+		if ($temperature eq "off") {
+			$message{'setting'}{'power'} = 'OFF';
+			$message{'termination'}{'durationInSeconds'} = $duration * 60;
+		} else {
+			$message{'setting'}{'power'} = 'ON';
+			$message{'setting'}{'temperature'} {'celsius'} =  $temperature + 0 ;
+		}
+
+		if ($duration eq "0") {
+			$message{'termination'}{'type'}  = 'MANUAL';
+		} else {
+			$message{'termination'}{'type'}  = 'TIMER';
+			$message{'termination'}{'durationInSeconds'} = $duration * 60;
+		}
 
 		if ($duration eq 'Auto'){
 			Log3 $name, 1, 'Return to automatic mode';
