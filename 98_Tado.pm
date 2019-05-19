@@ -95,7 +95,7 @@ sub Tado_Define($$)
 
 	#Take password and use custom encryption.
 	# Encryption is taken from fitbit / withings module
-	my $password = $param[3];
+	my $password = tado_encrypt($param[3]);
 
 	$hash->{Password} = $password;
 
