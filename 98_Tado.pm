@@ -1279,7 +1279,7 @@ sub Tado_Write ($$)
 		}
 
 		if ($duration eq 'Auto'){
-			Log3 $name, 1, 'Return to automatic mode';
+			Log3 $name, 4, 'Return to automatic mode';
 			my $d = Tado_httpSimpleOperation( $hash , $readTemplate, 'DELETE'  );
 		} else {
 			my $d = Tado_httpSimpleOperation( $hash , $readTemplate, 'PUT',  encode_json \%message  );
