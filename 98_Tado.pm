@@ -1062,7 +1062,7 @@ sub Tado_UpdateZoneCallback($)
 		return undef;
 	}
 
-	Log3 $name, 2, "Received non-blocking data from TADO for zone " . $param->{zoneID};
+	Log3 $name, 3, "Received non-blocking data from TADO for zone " . $param->{zoneID};
 
 	Log3 $name, 4, "FHEM -> Tado: " . $param->{url};
 	Log3 $name, 4, "FHEM -> Tado: " . $param->{message} if (defined $param->{message});
