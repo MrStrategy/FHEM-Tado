@@ -182,9 +182,9 @@ sub TadoDevice_Parse ($$)
 
 			if ($values[11] eq 'ONLINE'){
 				if ($values[8] eq 'off') {
-				  $hash->{STATE} = sprintf("T: %.1f &deg;C desired: %.1f &deg;C H: %.1f%", $values[3], $values[8], $values[9]);
+				  $hash->{STATE} = sprintf("T: %.1f &deg;C desired: %.1f &deg;C H: %.1f%%", $values[3], $values[8], $values[9]);
 			  } else {
-				  $hash->{STATE} = sprintf("T: %.1f &deg;C desired: off H: %.1f%", $values[3],  $values[9]);
+				  $hash->{STATE} = sprintf("T: %.1f &deg;C desired: off H: %.1f%%", $values[3],  $values[9]);
 			  }
 			} else {
 				$hash->{STATE} = "Device is in status '$values[11]'."
@@ -204,7 +204,8 @@ sub TadoDevice_Parse ($$)
 
 			readingsEndUpdate($hash, 1);
 
-			$hash->{STATE} = sprintf("T: %.1f &deg;C Solar: %.1f%<br>%s", $values[5], $values[3], $values[7]);
+      #Log3 'TadoDevice', 1, "TadoDevice_Parse: Preparing Sprintf with values $values[5], $values[3], $values[7]";
+			$hash->{STATE} = sprintf("T: %.1f &deg;C Solar: %.1f%% <br>%s", $values[5], $values[3], $values[7]);
 		} elsif ($values[2] eq 'locationdata') {
 			readingsBeginUpdate($hash);
 

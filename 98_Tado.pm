@@ -422,7 +422,7 @@ sub Tado_GetZones($)
 		for my $item( @{$d} ){
 
       $hash->{ZoneCount} = $hash->{ZoneCount} +1;
-			Log3 $name, 1, "Tado_GetZones ($name): zonecount is $hash->{ZoneCount}";
+			Log3 $name, 4, "Tado_GetZones ($name): zonecount is $hash->{ZoneCount}";
 
 			readingsBulkUpdate($hash, "Zone_" . $item->{id} . "_ID"  , $item->{id} );
 			readingsBulkUpdate($hash, "Zone_" . $item->{id} . "_Name"  ,  makeDeviceName($item->{name}) );
@@ -432,7 +432,7 @@ sub Tado_GetZones($)
 
       # Seems zone 0 is reported last
 			# needs to be ensured highest zone id is taken into zones value
-      if (undef $hash->{Zones}) {
+      if (not defined $hash->{Zones}) {
 			  $hash->{Zones} = $item->{id};
 			} elsif ($hash->{Zones} < $item->{id}) {
 				$hash->{Zones} = $item->{id};
@@ -720,17 +720,16 @@ sub Tado_GetEarlyStart($)
 	my $name = $hash->{NAME};
 
 	if (not defined $hash){
-		Log3 $name, 1, "Erro in Tado_GetEarlyStart: No zones defined. Define zones first." if (undef $hash->{Zones});
+		Log3 $name, 1, "Erro in Tado_GetEarlyStart: No zones defined. Define zones first." if (not defined $hash->{Zones});
 		return undef;
 	}
 
-	my $i=1;
-	if (defined $hash->{"Zone_0_ID"}) {$i = 0;};
+	my $it=1;
+	if (defined $hash->{"Zone_0_ID"}) {$it = 0;};
 
 	Log3 $name, 3, "Getting status update on early start for $hash->{ZoneCount} zones.";
 
-
- for ($i; $i <= $hash->{Zones}; $i++) {
+  for (my $i=$it; $i <= $hash->{Zones}; $i++) {
 
 		my $readTemplate = $url{earlyStart};
 
@@ -768,7 +767,7 @@ sub Tado_UpdateEarlyStartCallback($)
 		return undef;
 	}
 
-	Log3 $name, 2, "Received non-blocking data from TADO for weather device.";
+	Log3 $name, 3, "Received non-blocking data from TADO for weather device.";
 
 	Log3 $name, 4, "FHEM -> Tado: " . $param->{url};
 	Log3 $name, 4, "FHEM -> Tado: " . $param->{message} if (defined $param->{message});
@@ -813,16 +812,16 @@ sub Tado_RequestEarlyStartUpdate($)
 	my $name = $hash->{NAME};
 
 	if (not defined $hash){
-		Log3 $name, 1, "Error in Tado_RequestEarlyStartUpdate: No zones defined. Define zones first." if (undef $hash->{Zones});
+		Log3 $name, 1, "Error in Tado_RequestEarlyStartUpdate: No zones defined. Define zones first." if (not defined $hash->{Zones});
 		return undef;
 	}
 
 	Log3 $name, 3, "Getting status update on eraly start for $hash->{ZoneCount} zones.";
 
-   my $i=1;
-	 if (defined $hash->{"Zone_0_ID"}) {$i = 0;};
+	my $it=1;
+	if (defined $hash->{"Zone_0_ID"}) {$it = 0;};
 
-	for ($i; $i <= $hash->{Zones}; $i++) {
+ for (my $i=$it; $i <= $hash->{Zones}; $i++) {
 
 		my $readTemplate = $url{earlyStart};
 
@@ -866,7 +865,7 @@ sub Tado_UpdateWeatherCallback($)
 		return undef;
 	}
 
-	Log3 $name, 2, "Received non-blocking data from TADO for weather device.";
+	Log3 $name, 3, "Received non-blocking data from TADO for weather device.";
 
 	Log3 $name, 4, "FHEM -> Tado: " . $param->{url};
 	Log3 $name, 4, "FHEM -> Tado: " . $param->{message} if (defined $param->{message});
@@ -926,7 +925,7 @@ sub Tado_UpdateMobileDeviceCallback($)
 		return undef;
 	}
 
-	Log3 $name, 2, "Received non-blocking data from TADO for mobile devices.";
+	Log3 $name, 3, "Received non-blocking data from TADO for mobile devices.";
 
 	Log3 $name, 4, "FHEM -> Tado: " . $param->{url};
 	Log3 $name, 4, "FHEM -> Tado: " . $param->{message} if (defined $param->{message});
@@ -1128,20 +1127,30 @@ sub Tado_UpdateZoneCallback($)
 		#measured-temp-precision
 		. $d->{sensorDataPoints}->{insideTemperature}->{precision}->{celsius} . ";"
 		#measured-temp-precision-fahrenheit
-		. $d->{sensorDataPoints}->{insideTemperature}->{precision}->{fahrenheit} . ";"
+		. $d->{sensorDataPoints}->{insideTemperature}->{precision}->{fahrenheit} . ";";
 		#desired-temp
-		. $d->{setting}->{temperature}->{celsius}. ";"
+
+		if ($d->{setting}->{power} eq "OFF") {
+			$message .= $d->{setting}->{power}. ";";
+		} else {
+	  	$message .=  $d->{setting}->{temperature}->{celsius}. ";";
+		}
 
 		#measured-humidity
-		. $d->{sensorDataPoints}->{humidity}->{percentage} . ";"
+		$message .=  $d->{sensorDataPoints}->{humidity}->{percentage} . ";"
 		#measured-humidity-timestamp
 		. $d->{sensorDataPoints}->{humidity}->{timestamp} . ";"
 		#link
-		. $d->{link}->{state} . ";"
+		. $d->{link}->{state} . ";";
+
 		#open-window
-		. $d->{openWindow} . ";"
+		if (not defined $d->{openWindow}) {
+			$message .= "null;"
+		} else {
+		 $message .= $d->{openWindow} . ";"
+		}
 		#heating-percentage
-		. $d->{activityDataPoints}->{heatingPower}->{percentage} . ";"
+	  	$message .= $d->{activityDataPoints}->{heatingPower}->{percentage} . ";"
 		#heating-percentage-timestamp
 		. $d->{activityDataPoints}->{heatingPower}->{timestamp} . ";";
 
@@ -1165,17 +1174,27 @@ sub Tado_UpdateZoneCallback($)
 			#overlay-mode
 			. $d->{overlay}->{type} . ";"
 			#overlay-power
-			. $d->{overlay}->{setting}->{power} . ";"
+			. $d->{overlay}->{setting}->{power} . ";";
 			#overlay-desired-temperature
-			. $d->{overlay}->{setting}->{temperature}->{celsius} . ";"
+
+			if (not $d->{overlay}->{setting}->{power} eq 'OFF'){
+			$message .= $d->{overlay}->{setting}->{temperature}->{celsius} . ";";
+	   	} else {
+			$message .= 'OFF;';
+		  }
+
 			#overlay-termination-mode
-			. $d->{overlay}->{termination}->{type} . ";"
+			$message .= $d->{overlay}->{termination}->{type} . ";";
 			#overlay-termination-durationInSeconds
-			. $d->{overlay}->{termination}->{durationInSeconds} . ";"
-			#overlay-overlay-termination-expiry
-			. $d->{overlay}->{termination}->{expiry} . ";"
-			#overlay-overlay-termination-remainingTimeInSeconds
-			. $d->{overlay}->{termination}->{remainingTimeInSeconds};
+
+			if (not $d->{overlay}->{termination}->{type} eq 'MANUAL'){
+					$message .= $d->{overlay}->{termination}->{durationInSeconds} . ";"
+				#overlay-overlay-termination-expiry
+				. $d->{overlay}->{termination}->{expiry} . ";"
+				#overlay-overlay-termination-remainingTimeInSeconds
+				. $d->{overlay}->{termination}->{remainingTimeInSeconds};
+			}
+
 		}
 
 		Log3 $name, 4, "$name: trying to dispatch message: $message";
@@ -1236,10 +1255,10 @@ sub Tado_RequestZoneUpdate($)
 
 	Log3 $name, 3, "Getting zone update for $hash->{ZoneCount} zones.";
 
-	my $i=1;
-	if (defined $hash->{"Zone_0_ID"}) {$i = 0;};
+	my $it=1;
+	if (defined $hash->{"Zone_0_ID"}) {$it = 0;};
 
- for ($i; $i <= $hash->{Zones}; $i++) {
+ for (my $i=$it; $i <= $hash->{Zones}; $i++) {
 
 		my $readTemplate = $url{"getZoneTemperature"};
 
