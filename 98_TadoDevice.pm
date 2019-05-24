@@ -181,7 +181,7 @@ sub TadoDevice_Parse ($$)
 
 
 			if ($values[11] eq 'ONLINE'){
-				if ($values[8] eq 'off') {
+				if ($values[8] ne 'OFF') {
 				  $hash->{STATE} = sprintf("T: %.1f &deg;C desired: %.1f &deg;C H: %.1f%%", $values[3], $values[8], $values[9]);
 			  } else {
 				  $hash->{STATE} = sprintf("T: %.1f &deg;C desired: off H: %.1f%%", $values[3],  $values[9]);
