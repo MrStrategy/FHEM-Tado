@@ -1,6 +1,7 @@
 package main;
 use strict;
 use warnings;
+use Scalar::Util qw(looks_like_number);
 
 my %TadoDevice_gets = (
 update	=> " "
@@ -182,10 +183,10 @@ sub TadoDevice_Parse ($$)
 
 			if ($values[11] eq 'ONLINE'){
 				if ($values[8] ne 'OFF') {
-				  $hash->{STATE} = sprintf("T: %.1f &deg;C desired: %.1f &deg;C H: %.1f%%", $values[3], $values[8], $values[9]);
-			  } else {
-				  $hash->{STATE} = sprintf("T: %.1f &deg;C desired: off H: %.1f%%", $values[3],  $values[9]);
-			  }
+					$hash->{STATE} = sprintf("T: %.1f &deg;C desired: %.1f &deg;C H: %.1f%%", $values[3], $values[8], $values[9]);
+				} else {
+					$hash->{STATE} = sprintf("T: %.1f &deg;C desired: off H: %.1f%%", $values[3],  $values[9]);
+				}
 			} else {
 				$hash->{STATE} = "Device is in status '$values[11]'."
 			}
@@ -204,7 +205,7 @@ sub TadoDevice_Parse ($$)
 
 			readingsEndUpdate($hash, 1);
 
-      #Log3 'TadoDevice', 1, "TadoDevice_Parse: Preparing Sprintf with values $values[5], $values[3], $values[7]";
+			#Log3 'TadoDevice', 1, "TadoDevice_Parse: Preparing Sprintf with values $values[5], $values[3], $values[7]";
 			$hash->{STATE} = sprintf("T: %.1f &deg;C Solar: %.1f%% <br>%s", $values[5], $values[3], $values[7]);
 		} elsif ($values[2] eq 'locationdata') {
 			readingsBeginUpdate($hash);
@@ -291,22 +292,29 @@ sub TadoDevice_Set($@)
 		IOWrite($hash, "Temp", $hash->{TadoId}, "Auto");
 	} elsif ($opt eq "off")	{
 		IOWrite($hash, "Temp", $hash->{TadoId}, "0" , "off");
-	} elsif ($opt eq "temperature")	{
-		IOWrite($hash, "Temp", $hash->{TadoId}, "0" , shift @param);
-	} elsif ($opt eq "temperature-for-60")	{
-		IOWrite($hash, "Temp", $hash->{TadoId}, "60" , shift @param);
-	} elsif ($opt eq "temperature-for-90")	{
-		IOWrite($hash, "Temp", $hash->{TadoId}, "90" , shift @param);
-	} elsif ($opt eq "temperature-for-120")	{
-		IOWrite($hash, "Temp", $hash->{TadoId}, "120" , shift @param);
-	} elsif ($opt eq "temperature-for-180")	{
-		IOWrite($hash, "Temp", $hash->{TadoId}, "180" , shift @param);
-	} elsif ($opt eq "temperature-for-240")	{
-		IOWrite($hash, "Temp", $hash->{TadoId}, "240" , shift @param);
-	} elsif ($opt eq "temperature-for-300")	{
-		IOWrite($hash, "Temp", $hash->{TadoId}, "300" , shift @param);
 	} elsif ($opt eq "sayHi")	{
 		IOWrite($hash, "Hi", $hash->{TadoId});
+	} else {
+
+		my $temperature = shift @param;
+		if (not defined $temperature) {return "Missing temperature value. Please insert numeric value or lower case string 'off'"}
+		if (not (looks_like_number($temperature) || $temperature eq 'off' )) {return "Invalid temperature value. Please insert numeric value or lower case string 'off'"}
+
+		if ($opt eq "temperature")	{
+			IOWrite($hash, "Temp", $hash->{TadoId}, "0" , $temperature);
+		} elsif ($opt eq "temperature-for-60")	{
+			IOWrite($hash, "Temp", $hash->{TadoId}, "60" , $temperature);
+		} elsif ($opt eq "temperature-for-90")	{
+			IOWrite($hash, "Temp", $hash->{TadoId}, "90" , $temperature);
+		} elsif ($opt eq "temperature-for-120")	{
+			IOWrite($hash, "Temp", $hash->{TadoId}, "120" , $temperature);
+		} elsif ($opt eq "temperature-for-180")	{
+			IOWrite($hash, "Temp", $hash->{TadoId}, "180" , $temperature);
+		} elsif ($opt eq "temperature-for-240")	{
+			IOWrite($hash, "Temp", $hash->{TadoId}, "240" , $temperature);
+		} elsif ($opt eq "temperature-for-300")	{
+			IOWrite($hash, "Temp", $hash->{TadoId}, "300" , $temperature);
+		}
 	}
 }
 
@@ -315,7 +323,12 @@ sub TadoDevice_Attr(@)
 {
 	my ($cmd,$name,$aName,$aVal) = @_;
 	my $hash = $defs{$name};
-	Log3 $hash, 5, "TadoDevice: $name AttributeChange. CMD: $cmd, name: $aName, value: $aVal.";
+
+	if (defined $aVal){
+			Log3 $hash, 5, "TadoDevice: $name AttributeChange. CMD: $cmd, name: $aName, value: $aVal.";
+	} else {
+    	Log3 $hash, 5, "TadoDevice: $name AttributeChange. CMD: $cmd, name: $aName";
+  }
 
 	if ($aName eq "earlyStart") {
 		if ($cmd eq "set") {
@@ -333,7 +346,7 @@ sub TadoDevice_Attr(@)
 				return $ret;
 			}
 		} elsif ($cmd eq "del"){
-			Log3 $hash, 1, "TadoDevice: $name EarlyStart attribute was deleted. Setting earlyStart to false via Tado web API.";
+			Log3 $hash, 3, "TadoDevice: $name EarlyStart attribute was deleted. Setting earlyStart to false via Tado web API.";
 			my $ret = IOWrite($hash, "EarlyStart", $hash->{TadoId}, 'false');
 			if ($ret eq "0" or $ret eq "1"){
 				$hash->{EARLY_START} = 'false';

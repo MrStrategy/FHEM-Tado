@@ -417,11 +417,11 @@ sub Tado_GetZones($)
 
 		readingsBeginUpdate($hash);
 
-    $hash->{ZoneCount} = 0;
+		$hash->{ZoneCount} = 0;
 
 		for my $item( @{$d} ){
 
-      $hash->{ZoneCount} = $hash->{ZoneCount} +1;
+			$hash->{ZoneCount} = $hash->{ZoneCount} +1;
 			Log3 $name, 4, "Tado_GetZones ($name): zonecount is $hash->{ZoneCount}";
 
 			readingsBulkUpdate($hash, "Zone_" . $item->{id} . "_ID"  , $item->{id} );
@@ -430,10 +430,10 @@ sub Tado_GetZones($)
 			readingsBulkUpdate($hash, "Zone_" . $item->{id} . "_DateCreated"  , $item->{dateCreated} );
 			readingsBulkUpdate($hash, "Zone_" . $item->{id} . "_SupportsDazzle"  , $item->{supportsDazzle} );
 
-      # Seems zone 0 is reported last
+			# Seems zone 0 is reported last
 			# needs to be ensured highest zone id is taken into zones value
-      if (not defined $hash->{Zones}) {
-			  $hash->{Zones} = $item->{id};
+			if (not defined $hash->{Zones}) {
+				$hash->{Zones} = $item->{id};
 			} elsif ($hash->{Zones} < $item->{id}) {
 				$hash->{Zones} = $item->{id};
 			}
@@ -729,7 +729,7 @@ sub Tado_GetEarlyStart($)
 
 	Log3 $name, 3, "Getting status update on early start for $hash->{ZoneCount} zones.";
 
-  for (my $i=$it; $i <= $hash->{Zones}; $i++) {
+	for (my $i=$it; $i <= $hash->{Zones}; $i++) {
 
 		my $readTemplate = $url{earlyStart};
 
@@ -821,7 +821,7 @@ sub Tado_RequestEarlyStartUpdate($)
 	my $it=1;
 	if (defined $hash->{"Zone_0_ID"}) {$it = 0;};
 
- for (my $i=$it; $i <= $hash->{Zones}; $i++) {
+	for (my $i=$it; $i <= $hash->{Zones}; $i++) {
 
 		my $readTemplate = $url{earlyStart};
 
@@ -956,15 +956,17 @@ sub Tado_UpdateMobileDeviceCallback($)
 			. $item->{location}->{atHome}. ";"
 			. $item->{location}->{bearingFromHome}->{degrees}. ";"
 			. $item->{location}->{bearingFromHome}->{radians}. ";"
-			. $item->{location}->{relativeDistanceFromHomeFence}. ";"
-			. $item->{settings}->{pushNotifications}->{lowBatteryReminder}. ";"
-			. $item->{settings}->{pushNotifications}->{awayModeReminder}. ";"
-			. $item->{settings}->{pushNotifications}->{homeModeReminder}. ";"
-			. $item->{settings}->{pushNotifications}->{openWindowReminder}. ";";
+			. $item->{location}->{relativeDistanceFromHomeFence}. ";";
 
-			if (defined $item->{settings}->{pushNotifications}->{energySavingsReportReminder})
+			if (defined $item->{settings}->{pushNotifications})
 			{
-				$item .= $item->{settings}->{pushNotifications}->{energySavingsReportReminder};
+				$message .= $item->{settings}->{pushNotifications}->{lowBatteryReminder}. ";"
+				. $item->{settings}->{pushNotifications}->{awayModeReminder}. ";"
+				. $item->{settings}->{pushNotifications}->{homeModeReminder}. ";"
+				. $item->{settings}->{pushNotifications}->{openWindowReminder}. ";"
+				. $item->{settings}->{pushNotifications}->{energySavingsReportReminder};
+			} else {
+				$message .=";;;;"
 			}
 
 			Log3 $name, 4, "$name: trying to dispatch message: $message";
@@ -1133,7 +1135,7 @@ sub Tado_UpdateZoneCallback($)
 		if ($d->{setting}->{power} eq "OFF") {
 			$message .= $d->{setting}->{power}. ";";
 		} else {
-	  	$message .=  $d->{setting}->{temperature}->{celsius}. ";";
+			$message .=  $d->{setting}->{temperature}->{celsius}. ";";
 		}
 
 		#measured-humidity
@@ -1147,24 +1149,24 @@ sub Tado_UpdateZoneCallback($)
 		if (not defined $d->{openWindow}) {
 			$message .= "null;"
 		} else {
-		 $message .= $d->{openWindow} . ";"
+			$message .= $d->{openWindow} . ";"
 		}
 		#heating-percentage
-	  	$message .= $d->{activityDataPoints}->{heatingPower}->{percentage} . ";"
+		$message .= $d->{activityDataPoints}->{heatingPower}->{percentage} . ";"
 		#heating-percentage-timestamp
 		. $d->{activityDataPoints}->{heatingPower}->{timestamp} . ";";
 
 
-  if (defined $d->{nextScheduleChange}){
-		#nextScheduleChange-temperature
-		$message .=  $d->{nextScheduleChange}->{setting}->{temperature}->{celsius} . ";"
-		#nextScheduleChange-power
-		. $d->{nextScheduleChange}->{setting}->{power} . ";"
-		#nextScheduleChange-start
-		. $d->{nextScheduleChange}->{start} . ";";
-	} else {
-		$message .=  ";;;";
-	}
+		if (defined $d->{nextScheduleChange}){
+			#nextScheduleChange-temperature
+			$message .=  $d->{nextScheduleChange}->{setting}->{temperature}->{celsius} . ";"
+			#nextScheduleChange-power
+			. $d->{nextScheduleChange}->{setting}->{power} . ";"
+			#nextScheduleChange-start
+			. $d->{nextScheduleChange}->{start} . ";";
+		} else {
+			$message .=  ";;;";
+		}
 
 		#overlay-active
 		$message .= $overlay;
@@ -1178,17 +1180,17 @@ sub Tado_UpdateZoneCallback($)
 			#overlay-desired-temperature
 
 			if (not $d->{overlay}->{setting}->{power} eq 'OFF'){
-			$message .= $d->{overlay}->{setting}->{temperature}->{celsius} . ";";
-	   	} else {
-			$message .= 'OFF;';
-		  }
+				$message .= $d->{overlay}->{setting}->{temperature}->{celsius} . ";";
+			} else {
+				$message .= 'OFF;';
+			}
 
 			#overlay-termination-mode
 			$message .= $d->{overlay}->{termination}->{type} . ";";
 			#overlay-termination-durationInSeconds
 
 			if (not $d->{overlay}->{termination}->{type} eq 'MANUAL'){
-					$message .= $d->{overlay}->{termination}->{durationInSeconds} . ";"
+				$message .= $d->{overlay}->{termination}->{durationInSeconds} . ";"
 				#overlay-overlay-termination-expiry
 				. $d->{overlay}->{termination}->{expiry} . ";"
 				#overlay-overlay-termination-remainingTimeInSeconds
@@ -1227,7 +1229,7 @@ sub Tado_UpdateDueToTimer($)
 		$hash->{STATE} = 'Polling';
 	}
 
-  Tado_RequestZoneUpdate($hash);
+	Tado_RequestZoneUpdate($hash);
 	Tado_RequestMobileDeviceUpdate($hash);
 	Tado_RequestWeatherUpdate($hash);
 
@@ -1258,7 +1260,7 @@ sub Tado_RequestZoneUpdate($)
 	my $it=1;
 	if (defined $hash->{"Zone_0_ID"}) {$it = 0;};
 
- for (my $i=$it; $i <= $hash->{Zones}; $i++) {
+	for (my $i=$it; $i <= $hash->{Zones}; $i++) {
 
 		my $readTemplate = $url{"getZoneTemperature"};
 
@@ -1315,28 +1317,29 @@ sub Tado_Write ($$)
 		my %message ;
 		$message{'setting'}{'type'} = "HEATING";
 
-
-		if ($temperature eq "off") {
-			$message{'setting'}{'power'} = 'OFF';
-			$message{'termination'}{'durationInSeconds'} = $duration * 60;
-		} else {
-			$message{'setting'}{'power'} = 'ON';
-			$message{'setting'}{'temperature'} {'celsius'} =  $temperature + 0 ;
+		if (defined $temperature){
+			if ($temperature eq "off") {
+				$message{'setting'}{'power'} = 'OFF';
+				$message{'termination'}{'durationInSeconds'} = $duration * 60;
+			} else {
+				$message{'setting'}{'power'} = 'ON';
+				$message{'setting'}{'temperature'} {'celsius'} =  $temperature + 0 ;
+			}
 		}
-
+		
 		if ($duration eq "0") {
 			$message{'termination'}{'type'}  = 'MANUAL';
+		} elsif ($duration eq 'Auto') {
+			Log3 $name, 4, 'Return to automatic mode';
+			my $d = Tado_httpSimpleOperation( $hash , $readTemplate, 'DELETE'  );
+			return undef;
 		} else {
 			$message{'termination'}{'type'}  = 'TIMER';
 			$message{'termination'}{'durationInSeconds'} = $duration * 60;
 		}
 
-		if ($duration eq 'Auto'){
-			Log3 $name, 4, 'Return to automatic mode';
-			my $d = Tado_httpSimpleOperation( $hash , $readTemplate, 'DELETE'  );
-		} else {
-			my $d = Tado_httpSimpleOperation( $hash , $readTemplate, 'PUT',  encode_json \%message  );
-		}
+		my $d = Tado_httpSimpleOperation( $hash , $readTemplate, 'PUT',  encode_json \%message  );
+		return undef;
 	}
 
 	if ($code eq 'EarlyStart')
