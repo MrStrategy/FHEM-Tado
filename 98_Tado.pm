@@ -937,8 +937,12 @@ sub Tado_UpdateMobileDeviceCallback($)
 			. $item->{settings}->{pushNotifications}->{lowBatteryReminder}. ";"
 			. $item->{settings}->{pushNotifications}->{awayModeReminder}. ";"
 			. $item->{settings}->{pushNotifications}->{homeModeReminder}. ";"
-			. $item->{settings}->{pushNotifications}->{openWindowReminder}. ";"
-			. $item->{settings}->{pushNotifications}->{energySavingsReportReminder};
+			. $item->{settings}->{pushNotifications}->{openWindowReminder}. ";";
+
+			if (defined $item->{settings}->{pushNotifications}->{energySavingsReportReminder})
+			{
+				$item .= $item->{settings}->{pushNotifications}->{energySavingsReportReminder};
+			}
 
 			Log3 $name, 4, "$name: trying to dispatch message: $message";
 			my $found = Dispatch($hash, $message);
@@ -1115,19 +1119,22 @@ sub Tado_UpdateZoneCallback($)
 		#heating-percentage
 		. $d->{activityDataPoints}->{heatingPower}->{percentage} . ";"
 		#heating-percentage-timestamp
-		. $d->{activityDataPoints}->{heatingPower}->{timestamp} . ";"
+		. $d->{activityDataPoints}->{heatingPower}->{timestamp} . ";";
 
 
+  if (defined $d->{nextScheduleChange}){
 		#nextScheduleChange-temperature
-		. $d->{nextScheduleChange}->{setting}->{temperature}->{celsius} . ";"
+		$message .=  $d->{nextScheduleChange}->{setting}->{temperature}->{celsius} . ";"
 		#nextScheduleChange-power
 		. $d->{nextScheduleChange}->{setting}->{power} . ";"
 		#nextScheduleChange-start
-		. $d->{nextScheduleChange}->{start} . ";"
-
+		. $d->{nextScheduleChange}->{start} . ";";
+	} else {
+		$message .=  ";;;";
+	}
 
 		#overlay-active
-		. $overlay;
+		$message .= $overlay;
 
 		if ($overlay) {
 			$message .= ";"
