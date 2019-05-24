@@ -10,7 +10,7 @@ update	=> " "
 my %TadoDevice_zone_sets = (
 automatic             => ' ',
 off       	          => " ",
-temperature	          => " ",
+'temperature'	          => " ",
 'temperature-for-60'	=> " ",
 'temperature-for-90'	=> " ",
 'temperature-for-120'	=> " ",
@@ -273,8 +273,9 @@ sub TadoDevice_Set($@)
 
 	if (AttrVal($name, 'subType', 'nix') eq 'zone') {
 		if(!defined($TadoDevice_zone_sets{$opt})) {
-			my @cList = keys %TadoDevice_zone_sets;
-			return "Unknown argument $opt, choose one of " . join(" ", @cList);
+			#my @cList = keys %TadoDevice_zone_sets;
+			my $validValues = TadoDevice_GenerateTemperatureSchema();
+			return "Unknown argument $opt, choose one of " . $validValues; #join(" ", @cList);
 		}
 	} elsif (AttrVal($name, 'subType', 'nix') eq 'bridge') {
 		if(!defined($TadoDevice_bridge_sets{$opt})) {
@@ -297,6 +298,9 @@ sub TadoDevice_Set($@)
 	} else {
 
 		my $temperature = shift @param;
+
+    if (not (looks_like_number($temperature) || $temperature eq 'off' )) {return "Unknown argument $temperature for $opt, choose one of auto off 5.0 5.5 10";}
+
 		if (not defined $temperature) {return "Missing temperature value. Please insert numeric value or lower case string 'off'"}
 		if (not (looks_like_number($temperature) || $temperature eq 'off' )) {return "Invalid temperature value. Please insert numeric value or lower case string 'off'"}
 
@@ -357,6 +361,24 @@ sub TadoDevice_Attr(@)
 		}
 	}
 	return undef;
+}
+
+
+
+sub TadoDevice_GenerateTemperatureSchema()
+{
+	my $valueString = "off";
+  for (my $i=5;$i<=25;$i+=0.5){
+	  $valueString .= ",$i"
+  }
+
+ my $response = "";
+ foreach my $item (keys %TadoDevice_zone_sets){
+   if ($item =~ /^temperature/) {$response .= $item.":".$valueString." ";}
+   else {$response .= $item." ";}
+  }
+
+return $response;
 }
 
 
