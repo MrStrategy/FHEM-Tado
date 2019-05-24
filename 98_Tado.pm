@@ -417,7 +417,12 @@ sub Tado_GetZones($)
 
 		readingsBeginUpdate($hash);
 
+    $hash->{ZoneCount} = 0;
+
 		for my $item( @{$d} ){
+
+      $hash->{ZoneCount} = $hash->{ZoneCount} +1;
+			Log3 $name, 1, "Tado_GetZones ($name): zonecount is $hash->{ZoneCount}";
 
 			readingsBulkUpdate($hash, "Zone_" . $item->{id} . "_ID"  , $item->{id} );
 			readingsBulkUpdate($hash, "Zone_" . $item->{id} . "_Name"  ,  makeDeviceName($item->{name}) );
@@ -425,7 +430,13 @@ sub Tado_GetZones($)
 			readingsBulkUpdate($hash, "Zone_" . $item->{id} . "_DateCreated"  , $item->{dateCreated} );
 			readingsBulkUpdate($hash, "Zone_" . $item->{id} . "_SupportsDazzle"  , $item->{supportsDazzle} );
 
-			$hash->{"Zones"} = $item->{id};
+      # Seems zone 0 is reported last
+			# needs to be ensured highest zone id is taken into zones value
+      if (undef $hash->{Zones}) {
+			  $hash->{Zones} = $item->{id};
+			} elsif ($hash->{Zones} < $item->{id}) {
+				$hash->{Zones} = $item->{id};
+			}
 
 			$hash->{"Zone_" . $item->{id} . "_ID"} = $item->{id};
 			$hash->{"Zone_" . $item->{id} . "_Name"} =  makeDeviceName($item->{name});
@@ -463,6 +474,8 @@ sub Tado_GetZones($)
 			}
 
 		}
+
+
 
 		readingsEndUpdate($hash, 1);
 		return undef;
@@ -707,11 +720,17 @@ sub Tado_GetEarlyStart($)
 	my $name = $hash->{NAME};
 
 	if (not defined $hash){
-		Log3 $name, 1, "Erro in Tado_GetEarlyStart: No zones defined. Define zones first." if (undef $hash->{"Zones"});
+		Log3 $name, 1, "Erro in Tado_GetEarlyStart: No zones defined. Define zones first." if (undef $hash->{Zones});
 		return undef;
 	}
 
-	for (my $i=1; $i <= $hash->{Zones}; $i++) {
+	my $i=1;
+	if (defined $hash->{"Zone_0_ID"}) {$i = 0;};
+
+	Log3 $name, 3, "Getting status update on early start for $hash->{ZoneCount} zones.";
+
+
+ for ($i; $i <= $hash->{Zones}; $i++) {
 
 		my $readTemplate = $url{earlyStart};
 
@@ -794,11 +813,16 @@ sub Tado_RequestEarlyStartUpdate($)
 	my $name = $hash->{NAME};
 
 	if (not defined $hash){
-		Log3 $name, 1, "Error in Tado_RequestEarlyStartUpdate: No zones defined. Define zones first." if (undef $hash->{"Zones"});
+		Log3 $name, 1, "Error in Tado_RequestEarlyStartUpdate: No zones defined. Define zones first." if (undef $hash->{Zones});
 		return undef;
 	}
 
-	for (my $i=1; $i <= $hash->{Zones}; $i++) {
+	Log3 $name, 3, "Getting status update on eraly start for $hash->{ZoneCount} zones.";
+
+   my $i=1;
+	 if (defined $hash->{"Zone_0_ID"}) {$i = 0;};
+
+	for ($i; $i <= $hash->{Zones}; $i++) {
 
 		my $readTemplate = $url{earlyStart};
 
@@ -1201,7 +1225,7 @@ sub Tado_RequestZoneUpdate($)
 		return undef;
 	}
 
-	if (not defined $hash->{"Zones"}){
+	if (not defined $hash->{Zones}){
 		Log3 'Tado', 1, "Error on Tado_RequestZoneUpdate. Missing zones. Please define zones first.";
 		return undef;
 	}
@@ -1210,9 +1234,12 @@ sub Tado_RequestZoneUpdate($)
 
 
 
-	Log3 $name, 3, "Getting update for $hash->{Zones} zones.";
+	Log3 $name, 3, "Getting zone update for $hash->{ZoneCount} zones.";
 
-	for (my $i=1; $i <= $hash->{Zones}; $i++) {
+	my $i=1;
+	if (defined $hash->{"Zone_0_ID"}) {$i = 0;};
+
+ for ($i; $i <= $hash->{Zones}; $i++) {
 
 		my $readTemplate = $url{"getZoneTemperature"};
 
