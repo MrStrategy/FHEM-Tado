@@ -78,7 +78,7 @@ sub TadoDevice_Define($$)
 		$i++;
 	}
 
-	$hash->{STATE} = 'Initialized';
+  readingsSingleUpdate($hash, 'state', 'Initialized', 0);
 	AssignIoPort($hash,$iodev) if( !$hash->{IODev} );
 
 	if(defined($hash->{IODev})) {
@@ -87,13 +87,13 @@ sub TadoDevice_Define($$)
 		Log3 $name, 1, "Tado $name: no I/O device";
 	}
 
-	my $code = $hash->{IODev}->{NAME} . "-" . $hash->{TadoId};
+	my $code = $hash->{IODev}->{NAME} . "-" . ReadingsVal($name, "TadoId", undef);
 
 	Log3 $name, 3, "Device Code is: " . $code;
 
 	my $d = $modules{TadoDevice}{defptr}{$code};
-	return "TadoDevice device $hash->{ID} on Tado $iodev already defined as $d->{NAME}."
-	if( defined($d)
+
+	return "TadoDevice device $hash->{ID} on Tado $iodev already defined as $d->{NAME}."	if( defined($d)
 	&& $d->{IODev} && $hash->{IODev} && $d->{IODev} == $hash->{IODev}
 	&& $d->{NAME} ne $name );
 
@@ -105,9 +105,9 @@ sub TadoDevice_Define($$)
 sub TadoDevice_Undef($$)
 {
 	my ($hash, $arg) = @_;
-	# nothing to do
+	my $name = $hash->{NAME};
 
-	my $code = $hash->{IODev}->{NAME} . "-" . $hash->{TadoId};
+	my $code = $hash->{IODev}->{NAME} . "-" . ReadingsVal($name, "TadoId", undef);
 	delete($modules{TadoDevice}{defptr}{$code});
 
 	return undef;
@@ -183,12 +183,12 @@ sub TadoDevice_Parse ($$)
 
 			if ($values[11] eq 'ONLINE'){
 				if ($values[8] ne 'OFF') {
-					$hash->{STATE} = sprintf("T: %.1f &deg;C desired: %.1f &deg;C H: %.1f%%", $values[3], $values[8], $values[9]);
+					readingsSingleUpdate($hash, 'state', sprintf("T: %.1f &deg;C desired: %.1f &deg;C H: %.1f%%", $values[3], $values[8], $values[9]), 1);
 				} else {
-					$hash->{STATE} = sprintf("T: %.1f &deg;C desired: off H: %.1f%%", $values[3],  $values[9]);
+					readingsSingleUpdate($hash, 'state', sprintf("T: %.1f &deg;C desired: off H: %.1f%%", $values[3],  $values[9]), 1);
 				}
 			} else {
-				$hash->{STATE} = "Device is in status '$values[11]'."
+				readingsSingleUpdate($hash, 'state', "Device is in status '$values[11]'.", 1);
 			}
 
 		} elsif ($values[2] eq 'earlyStart') {
@@ -205,8 +205,7 @@ sub TadoDevice_Parse ($$)
 
 			readingsEndUpdate($hash, 1);
 
-			#Log3 'TadoDevice', 1, "TadoDevice_Parse: Preparing Sprintf with values $values[5], $values[3], $values[7]";
-			$hash->{STATE} = sprintf("T: %.1f &deg;C Solar: %.1f%% <br>%s", $values[5], $values[3], $values[7]);
+			readingsSingleUpdate($hash, 'state', sprintf("T: %.1f &deg;C Solar: %.1f%% <br>%s", $values[5], $values[3], $values[7]) , 1);
 		} elsif ($values[2] eq 'locationdata') {
 			readingsBeginUpdate($hash);
 
@@ -223,9 +222,10 @@ sub TadoDevice_Parse ($$)
 			readingsBulkUpdate($hash, "pushNotification_openWindowReminder", $values[12] );
 			readingsBulkUpdate($hash, "pushNotification_energySavingsReportReminder", $values[13] );
 
+      readingsBulkUpdate($hash, 'state', sprintf("Tracking: %s Home: %s", $values[3], $values[5]), 1);
+
 			readingsEndUpdate($hash, 1);
 
-			$hash->{STATE} = sprintf("Tracking: %s Home: %s", $values[3], $values[5]);
 		}
 
 		# Rückgabe des Gerätenamens, für welches die Nachricht bestimmt ist.
@@ -255,7 +255,7 @@ sub TadoDevice_Get($@)
 	}
 
 	if ($opt eq "update")	{
-		IOWrite($hash, "Update", $hash->{TadoId});
+		IOWrite($hash, "Update", ReadingsVal($name, "TadoId", undef));
 	}
 
 	return undef;
@@ -290,11 +290,11 @@ sub TadoDevice_Set($@)
 	}
 
 	if ($opt eq "automatic")	{
-		IOWrite($hash, "Temp", $hash->{TadoId}, "Auto");
+		IOWrite($hash, "Temp", ReadingsVal($name, "TadoId", undef) , "Auto");
 	} elsif ($opt eq "off")	{
-		IOWrite($hash, "Temp", $hash->{TadoId}, "0" , "off");
+		IOWrite($hash, "Temp", ReadingsVal($name, "TadoId", undef), "0" , "off");
 	} elsif ($opt eq "sayHi")	{
-		IOWrite($hash, "Hi", $hash->{TadoId});
+		IOWrite($hash, "Hi", ReadingsVal($name, "TadoId", undef));
 	} else {
 
 		my $temperature = shift @param;
@@ -304,19 +304,19 @@ sub TadoDevice_Set($@)
 		if (not (looks_like_number($temperature) || $temperature eq 'off' )) {return "Invalid temperature value. Please insert numeric value or lower case string 'off'"}
 
 		if ($opt eq "temperature")	{
-			IOWrite($hash, "Temp", $hash->{TadoId}, "0" , $temperature);
+			IOWrite($hash, "Temp", ReadingsVal($name, "TadoId", undef), "0" , $temperature);
 		} elsif ($opt eq "temperature-for-60")	{
-			IOWrite($hash, "Temp", $hash->{TadoId}, "60" , $temperature);
+			IOWrite($hash, "Temp", ReadingsVal($name, "TadoId", undef), "60" , $temperature);
 		} elsif ($opt eq "temperature-for-90")	{
-			IOWrite($hash, "Temp", $hash->{TadoId}, "90" , $temperature);
+			IOWrite($hash, "Temp", ReadingsVal($name, "TadoId", undef), "90" , $temperature);
 		} elsif ($opt eq "temperature-for-120")	{
-			IOWrite($hash, "Temp", $hash->{TadoId}, "120" , $temperature);
+			IOWrite($hash, "Temp", ReadingsVal($name, "TadoId", undef), "120" , $temperature);
 		} elsif ($opt eq "temperature-for-180")	{
-			IOWrite($hash, "Temp", $hash->{TadoId}, "180" , $temperature);
+			IOWrite($hash, "Temp", ReadingsVal($name, "TadoId", undef), "180" , $temperature);
 		} elsif ($opt eq "temperature-for-240")	{
-			IOWrite($hash, "Temp", $hash->{TadoId}, "240" , $temperature);
+			IOWrite($hash, "Temp", ReadingsVal($name, "TadoId", undef), "240" , $temperature);
 		} elsif ($opt eq "temperature-for-300")	{
-			IOWrite($hash, "Temp", $hash->{TadoId}, "300" , $temperature);
+			IOWrite($hash, "Temp", ReadingsVal($name, "TadoId", undef), "300" , $temperature);
 		}
 	}
 }
@@ -340,7 +340,7 @@ sub TadoDevice_Attr(@)
 			}
 			Log3 $hash, 3, "TadoDevice: $name EarlyStart $aVal.";
 
-			my $ret = IOWrite($hash, "EarlyStart", $hash->{TadoId}, $aVal);
+			my $ret = IOWrite($hash, "EarlyStart", ReadingsVal($name, "TadoId", undef), $aVal);
 
 			if ($ret eq "0" or $ret eq "1"){
 				$hash->{EARLY_START} = $aVal;
@@ -350,7 +350,7 @@ sub TadoDevice_Attr(@)
 			}
 		} elsif ($cmd eq "del"){
 			Log3 $hash, 3, "TadoDevice: $name EarlyStart attribute was deleted. Setting earlyStart to false via Tado web API.";
-			my $ret = IOWrite($hash, "EarlyStart", $hash->{TadoId}, 'false');
+			my $ret = IOWrite($hash, "EarlyStart", ReadingsVal($name, "TadoId", undef), 'false');
 			if ($ret eq "0" or $ret eq "1"){
 				$hash->{EARLY_START} = 'false';
 				return undef;

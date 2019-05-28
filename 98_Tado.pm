@@ -98,9 +98,9 @@ sub Tado_Define($$)
 	$hash->{Password} = $password;
 
 	if (defined $param[4]) {
-		$hash->{DEF} = "$hash->{Username} $password $param[4]";
+		$hash->{DEF} = sprintf("%s %s %s", InternalVal($name,'Username', undef), $password, $param[4]);
 	} else {
-		$hash->{DEF} = "$hash->{Username} $password";
+		$hash->{DEF} = sprintf("%s %s", InternalVal($name,'Username', undef) ,$password);
 	}
 
 	#Check if interval is set and numeric.
@@ -136,8 +136,8 @@ sub Tado_Define($$)
 	#Otherwise some error messages are generated due to auto created devices...
 	InternalTimer(gettimeofday()+15, "Tado_GetZones", $hash) if (defined $hash);
 
-	Log3 $name, 5, "Tado_Define $name: Starting timer with Interval $hash->{INTERVAL}";
-	InternalTimer(gettimeofday()+$hash->{INTERVAL}, "Tado_UpdateDueToTimer", $hash) if (defined $hash);
+	Log3 $name, 1, sprintf("Tado_Define %s: Starting timer with interval %s", $name, InternalVal($name,'INTERVAL', undef));
+	InternalTimer(gettimeofday()+ InternalVal($name,'INTERVAL', undef), "Tado_UpdateDueToTimer", $hash) if (defined $hash);
 	return undef;
 }
 
@@ -271,9 +271,9 @@ sub Tado_Set($@)
 		Tado_RequestZoneUpdate($hash);
 		delete $hash->{LOCAL};
 
-		InternalTimer(gettimeofday()+$hash->{INTERVAL}, "Tado_UpdateDueToTimer", $hash);
+		InternalTimer(gettimeofday()+ InternalVal($name,'INTERVAL', undef), "Tado_UpdateDueToTimer", $hash);
 
-		Log3 $name, 1, "Tado_Set $name: Updated readings and started timer to automatically update readings with interval $hash->{INTERVAL}";
+		Log3 $name, 1, sprintf("Tado_Set %s: Updated readings and started timer to automatically update readings with interval %s", $name, InternalVal($name,'INTERVAL', undef));
 
 
 	} elsif ($opt eq "stop"){
@@ -315,8 +315,8 @@ sub Tado_GetHomesAndDevices($)
 
 	my $readTemplate = $url{"getHomeId"};
 
-	my $passwd = urlEncode(tado_decrypt($hash->{Password}));
-	my $user = urlEncode($hash->{Username});
+	my $passwd = urlEncode(tado_decrypt(InternalVal($name,'Password', undef)));
+	my $user = urlEncode(InternalVal($name,'Username', undef));
 
 	$readTemplate =~ s/#Username#/$user/g;
 	$readTemplate =~ s/#Password#/$passwd/g;
@@ -336,9 +336,6 @@ sub Tado_GetHomesAndDevices($)
 		readingsBulkUpdate($hash, "HomeName", $saveDeviceName );
 		readingsEndUpdate($hash, 1);
 
-		#$hash->{HomeID} = $d->{homes}[0]->{id};
-		#$hash->{HomeName} = $d->{homes}[0]->{name};
-
 		Log3 $name, 1, "New Tado Home defined. Id: $d->{homes}[0]->{id} Name: $saveDeviceName";
 
     # This code should not be called, as TADO states in the FAQ they're currently just supporting one single home.
@@ -349,28 +346,8 @@ sub Tado_GetHomesAndDevices($)
 			readingsBulkUpdate($hash, "HomeName_2",  $saveDeviceName);
 			readingsEndUpdate($hash, 1);
 
-		#	$hash->{HomeID_2} = $d->{homes}[1]->{id};
-	  #	$hash->{HomeName_2} = $d->{homes}[1]->{name};
-			Log3 $name, 1, "New Tado Home defined. Id: $hash->{HomeID_2} Name: $saveDeviceName";
+			Log3 $name, 1, "New Tado Home defined. Id: $d->{homes}[1]->{id} Name: $saveDeviceName";
 		}
-
-
-		# if (scalar (@{$d->{mobileDevices}}) > 0 ){
-		# 	readingsBeginUpdate($hash);
-		# 	for (my $mobileDeviceCounter = 0; $mobileDeviceCounter < scalar (@{$d->{mobileDevices}}); $mobileDeviceCounter++){
-		# 		my $deviceId_Fieldname = "MobileDevice_".$mobileDeviceCounter."_id";
-		# 		my $deviceName_Fieldname = "MobileDevice_".$mobileDeviceCounter."_Name";
-		# 		readingsBulkUpdate($hash, $deviceId_Fieldname, $d->{mobileDevices}[$mobileDeviceCounter]->{id} );
-		# 		readingsBulkUpdate($hash, $deviceName_Fieldname , makeDeviceName($d->{mobileDevices}[$mobileDeviceCounter]->{name}));
-		#
-		#
-		# 		$hash->{$deviceId_Fieldname} = $d->{mobileDevices}[$mobileDeviceCounter]->{id};
-		# 		$hash->{$deviceName_Fieldname} = makeDeviceName($d->{mobileDevices}[$mobileDeviceCounter]->{name});
-		#
-		# 		Log3 $name, 1, "New Tado Device defined. Id: $hash->{$deviceId_Fieldname} Name: $hash->{$deviceName_Fieldname}";
-		# 	}
-		# 	readingsEndUpdate($hash, 1);
-		# }
 
 		readingsSingleUpdate($hash,'state','Initialized',0);
 		return undef;
@@ -399,8 +376,8 @@ sub Tado_GetZones($)
 
 	my $readTemplate = $url{"getZoneDetails"};
 
-	my $passwd = urlEncode(tado_decrypt($hash->{Password}));
-	my $user = urlEncode($hash->{Username});
+	my $passwd = urlEncode(tado_decrypt(InternalVal($name,'Password', undef)));
+	my $user = urlEncode(InternalVal($name,'Username', undef));
 
 
 	$readTemplate =~ s/#HomeID#/$homeID/g;
@@ -440,8 +417,6 @@ sub Tado_GetZones($)
 
 			readingsBulkUpdate($hash, "Zone_" . $item->{id} . "_Name"  ,  $deviceName );
 
-			#$hash->{"Zone_" . $item->{id} . "_Name"} =  makeDeviceName($item->{name});
-
 			my $code = $name ."-". $item->{id};
 
 			if( defined($modules{TadoDevice}{defptr}{$code}) ) {
@@ -480,7 +455,7 @@ sub Tado_GetZones($)
 		}
 
     $hash->{ZoneIDs} = join(", ", keys %ZoneIds);
-		Log3 'Tado', 3, "After Updating zones: ".Dumper $hash->{ZoneIDs};
+		Log3 'Tado', 3, "After Updating zones: ".Dumper InternalVal($name,'ZoneIDs', undef);
 		#Log3 'Tado', 1, "Hashdump: ".Dumper $hash;
 		readingsEndUpdate($hash, 1);
 		return undef;
@@ -513,8 +488,8 @@ sub Tado_GetDevices($)
 
 	my $readTemplate = $url{"getDevices"};
 
-	my $passwd = urlEncode(tado_decrypt($hash->{Password}));
-	my $user = urlEncode($hash->{Username});
+	my $passwd = urlEncode(tado_decrypt(InternalVal($name,'Password', undef)));
+	my $user = urlEncode(InternalVal($name,'Username', undef));
 
 
 	$readTemplate =~ s/#HomeID#/$homeID/g;
@@ -606,8 +581,8 @@ sub Tado_GetMobileDevices($)
 
 	my $readTemplate = $url{"getMobileDevices"};
 
-	my $passwd = urlEncode(tado_decrypt($hash->{Password}));
-	my $user = urlEncode($hash->{Username});
+	my $passwd = urlEncode(tado_decrypt(InternalVal($name,'Password', undef)));
+	my $user = urlEncode(InternalVal($name,'Username', undef));
 
 	$readTemplate =~ s/#Username#/$user/g;
 	$readTemplate =~ s/#Password#/$passwd/g;
@@ -675,7 +650,7 @@ sub Tado_GetMobileDevices($)
 		}
 
 		$hash->{MobileDeviceIDs} = join(", ", keys %MobileDeviceIds);
-		Log3 'Tado', 3, "After Updating mobile device ids: ".Dumper $hash->{ZoneIDs};
+		Log3 'Tado', 3, "After Updating mobile device ids: ".Dumper InternalVal($name,'ZoneIds', undef);
 
 	}
 
@@ -750,7 +725,7 @@ sub Tado_GetEarlyStart($)
 	my $name = $hash->{NAME};
 
 	if (not defined $hash){
-		Log3 $name, 1, "Erro in Tado_GetEarlyStart: No zones defined. Define zones first." if (not defined $hash->{ZoneIDs});
+		Log3 $name, 1, "Erro in Tado_GetEarlyStart: No zones defined. Define zones first." if (not defined InternalVal($name,'ZoneIDs', undef));
 		return undef;
 	}
 
@@ -761,19 +736,17 @@ sub Tado_GetEarlyStart($)
 		return $msg;
 	}
 
-	Log3 $name, 3, "Getting status update on early start for $hash->{ZoneCount} zones.";
+	Log3 $name, 3, sprintf("Getting status update on early start for %s zones.", ReadingsVal($name,'ZoneCount', undef));
 
-	foreach my $i (split /, /,  $hash->{ZoneIDs}) {
+	foreach my $i (split /, /,  InternalVal($name,'ZoneIDs', undef)) {
 
 		my $readTemplate = $url{earlyStart};
 
-		my $passwd = urlEncode(tado_decrypt($hash->{Password}));
-		my $user = urlEncode($hash->{Username});
-
-		my $ZoneName = "Zone_" . $i . "_ID";
+		my $passwd = urlEncode(tado_decrypt(InternalVal($name,'Password', undef)));
+		my $user = urlEncode(InternalVal($name,'Username', undef));
 
 		$readTemplate =~ s/#HomeID#/$homeID/g;
-		$readTemplate =~ s/#ZoneID#/$hash->{$ZoneName}/g;
+		$readTemplate =~ s/#ZoneID#/$i/g;
 		$readTemplate =~ s/#Username#/$user/g;
 		$readTemplate =~ s/#Password#/$passwd/g;
 
@@ -846,7 +819,7 @@ sub Tado_RequestEarlyStartUpdate($)
 	my $name = $hash->{NAME};
 
 	if (not defined $hash){
-		Log3 $name, 1, "Error in Tado_RequestEarlyStartUpdate: No zones defined. Define zones first." if (not defined $hash->{ZoneIDs});
+		Log3 $name, 1, "Error in Tado_RequestEarlyStartUpdate: No zones defined. Define zones first." if (not defined InternalVal($name,'ZoneIDs', undef));
 		return undef;
 	}
 
@@ -858,19 +831,19 @@ sub Tado_RequestEarlyStartUpdate($)
 	}
 
 
-	Log3 $name, 3, "Getting status update on early start for $hash->{ZoneCount} zones.";
+Log3 $name, 3, sprintf("Getting status update on early start for %s zones.", ReadingsVal($name,'ZoneCount', undef));
 
-	foreach my $i (split /, /,  $hash->{ZoneIDs}) {
+	foreach my $i (split /, /,  InternalVal($name,'ZoneIDs', undef)) {
 
 		my $readTemplate = $url{earlyStart};
 
-		my $passwd = urlEncode(tado_decrypt($hash->{Password}));
-		my $user = urlEncode($hash->{Username});
+		my $passwd = urlEncode(tado_decrypt(InternalVal($name,'Password', undef)));
+		my $user = urlEncode(InternalVal($name,'Username', undef));
 
 		my $ZoneName = "Zone_" . $i . "_ID";
 
 		$readTemplate =~ s/#HomeID#/$homeID/g;
-		$readTemplate =~ s/#ZoneID#/$hash->{$ZoneName}/g;
+		$readTemplate =~ s/#ZoneID#/$i/g;
 		$readTemplate =~ s/#Username#/$user/g;
 		$readTemplate =~ s/#Password#/$passwd/g;
 
@@ -1065,8 +1038,8 @@ if (not defined $homeID) {
 
 	Log3 $name, 4, "Tado_RequestWeatherUpdate Called. Name: $name";
 	my $readTemplate = $url{getWeather};
-	my $passwd = urlEncode(tado_decrypt($hash->{Password}));
-	my $user = urlEncode($hash->{Username});
+	my $passwd = urlEncode(tado_decrypt(InternalVal($name,'Password', undef)));
+	my $user = urlEncode(InternalVal($name,'Username', undef));
 
 	$readTemplate =~ s/#HomeID#/$homeID/g;
 	$readTemplate =~ s/#Username#/$user/g;
@@ -1109,8 +1082,8 @@ sub Tado_RequestMobileDeviceUpdate($)
 
 	Log3 $name, 4, "Tado_RequestMobileDeviceUpdate Called. Name: $name";
 	my $readTemplate = $url{getMobileDevices};
-	my $passwd = urlEncode(tado_decrypt($hash->{Password}));
-	my $user = urlEncode($hash->{Username});
+	my $passwd = urlEncode(tado_decrypt(InternalVal($name,'Password', undef)));
+	my $user = urlEncode(InternalVal($name,'Username', undef));
 
 	$readTemplate =~ s/#Username#/$user/g;
 	$readTemplate =~ s/#Password#/$passwd/g;
@@ -1278,7 +1251,7 @@ sub Tado_UpdateDueToTimer($)
 	if(!$hash->{LOCAL}) {
 		RemoveInternalTimer($hash);
 		#Log3 "Test", 1, Dumper($hash);
-		InternalTimer(gettimeofday()+$hash->{INTERVAL}, "Tado_UpdateDueToTimer", $hash);
+		InternalTimer(gettimeofday()+InternalVal($name,'INTERVAL', undef), "Tado_UpdateDueToTimer", $hash);
 		readingsSingleUpdate($hash,'state','Polling',0);
 	}
 
@@ -1299,7 +1272,7 @@ sub Tado_RequestZoneUpdate($)
 		return undef;
 	}
 
-	if (not defined $hash->{ZoneIDs}){
+	if (not defined InternalVal($name,'ZoneIDs', undef)){
 		Log3 'Tado', 1, "Error on Tado_RequestZoneUpdate. Missing zones. Please define zones first.";
 		return undef;
 	}
@@ -1316,17 +1289,17 @@ sub Tado_RequestZoneUpdate($)
 
 	Log3 $name, 3, sprintf ("Getting zone update for %s zones.", ReadingsVal($name, "ZoneCount", 0 ));
 
-  Log3 $name, 3, "Array out of zone ids: ". Dumper(split /, /,  $hash->{ZoneIDs});
+  Log3 $name, 3, "Array out of zone ids: ". Dumper(split /, /,  InternalVal($name,'ZoneIDs', undef));
 
 
-	foreach my $i (split /, /,  $hash->{ZoneIDs}) {
+	foreach my $i (split /, /,  InternalVal($name,'ZoneIDs', undef)) {
 
     Log3 $name, 3, "Updating zone id: ". $i;
 
 		my $readTemplate = $url{"getZoneTemperature"};
 
-		my $passwd = urlEncode(tado_decrypt($hash->{Password}));
-		my $user = urlEncode($hash->{Username});
+		my $passwd = urlEncode(tado_decrypt(InternalVal($name,'Password', undef)));
+		my $user = urlEncode(InternalVal($name,'Username', undef));
 
 
 		$readTemplate =~ s/#HomeID#/$homeID/g;
@@ -1365,8 +1338,8 @@ sub Tado_Write ($$)
 
 		my $readTemplate = $url{"setZoneTemperature"};
 
-		my $passwd = urlEncode(tado_decrypt($hash->{Password}));
-		my $user = urlEncode($hash->{Username});
+		my $passwd = urlEncode(tado_decrypt(InternalVal($name,'Password', undef)));
+		my $user = urlEncode(InternalVal($name,'Username', undef));
 
 		my $homeID = ReadingsVal ($name,"HomeID",undef);
 
@@ -1410,8 +1383,8 @@ sub Tado_Write ($$)
 
 		my $readTemplate = $url{"earlyStart"};
 
-		my $passwd = urlEncode(tado_decrypt($hash->{Password}));
-		my $user = urlEncode($hash->{Username});
+		my $passwd = urlEncode(tado_decrypt(InternalVal($name,'Password', undef)));
+		my $user = urlEncode(InternalVal($name,'Username', undef));
 
 		my $homeID = ReadingsVal ($name,"HomeID",undef);
 
@@ -1442,8 +1415,8 @@ sub Tado_Write ($$)
 	if ($code eq 'Hi')
 	{
 		my $readTemplate = $url{"identifyDevice"};
-		my $passwd = urlEncode(tado_decrypt($hash->{Password}));
-		my $user = urlEncode($hash->{Username});
+		my $passwd = urlEncode(tado_decrypt(InternalVal($name,'Password', undef)));
+		my $user = urlEncode(InternalVal($name,'Username', undef));
 
 		$readTemplate =~ s/#DeviceId#/$zoneID/g;
 		$readTemplate =~ s/#Username#/$user/g;
