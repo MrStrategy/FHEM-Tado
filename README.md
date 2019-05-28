@@ -11,12 +11,8 @@ The 98_TadoDevice.pm contains the code to define the different TadoDevices. The 
 
 <h2>There are still some things todo which I have not done so far:</h2>
 <ul>
-<li>- Switch from synchronous communication to asynchronous communication so FHEM is not blocked.</li>
 <li>- Parse the several date information and bring this to local time</li>
 <li>- Add validation on inserted serial numbers</li>
-<li>- Add more flexible options to set a zone / room temperature</li>
-<li>- [bug] Add auto update to waether-channel</li>
-<li>- [bug] Request to update the values for early start is not working</li>
 </ul>
 
 
@@ -74,7 +70,7 @@ The 98_TadoDevice.pm contains the code to define the different TadoDevices. The 
         <code>get &lt;name&gt; &lt;option&gt;</code>
         <br><br>
         You can <i>get</i> the major information from the Tado cloud.
- 		<br><br>
+ 	    	<br><br>
         Options:
         <ul>
               <li><i>home</i><br>
@@ -114,8 +110,8 @@ The 98_TadoDevice.pm contains the code to define the different TadoDevices. The 
                   It will not touch existing devices but add new ones.
               </li>
               <li><i>weather</i><br/>
-                  Creates or updates an additional device for the data bridge containing the weather data provided by Tado. This command will only be executed if the attribute <i>generateWeather</i> is set to <i>yes</i>. If the attribute is set to <i>no</i> or not existing an error message will be displayed and no communication towards Tado will be done.</li>
-
+                  Creates or updates an additional device for the data bridge containing the weather data provided by Tado. This command will only be executed if the attribute <i>generateWeather</i> is set to <i>yes</i>. If the attribute is set to <i>no</i> or not existing an error message will be displayed and no communication towards Tado will be done.
+              </li>
         </ul>              
     </ul>
     <br>   
@@ -144,14 +140,16 @@ The 98_TadoDevice.pm contains the code to define the different TadoDevices. The 
           </ul>
     </ul>
 </ul>
+
+
+
 <h3>TadoDevice</h3>
 <ul>
-    <i>TadoDevice</i> is the implementation of a zone, a device or the weather channel related
-    to a tado cloud account.
-    It can only be used in conjunction with a Tado device (a Tado bridge).
+    <i>TadoDevice</i> is the implementation of a zone, a device, a mobile device or the weather channel connected to one Tado instance and therefor one tado cloud account.
+    It can only be used in conjunction with a Tado instance (a Tado bridge).
     The TadoDevice is intended to display the current measurements of a zone or device and allow
     the interaction. It can be used to set or reset the temperature within a zone or to
-    display a "hi" statement on a physical Tado device.
+    display a "hi" statement on a physical Tado device. It can also be used to identify which mobile devices are at home.
     TadoDevices should not be created manually. They are auto generated once a Tado device is defined.
     <br><br>
     <a name="TadoDevicedefine"></a>
@@ -180,30 +178,48 @@ The 98_TadoDevice.pm contains the code to define the different TadoDevices. The 
         Options:
         <ul>
               <li><i>sayHi</i><br>
+                  <b>Works on devices only.</b>
                   Sends a request to the a specific physical device. Once the request
                   reaches the device the device displays "HI".
-                  Command can be used to identify a physical device.</li>
+                  Command can be used to identify a physical device.
+                  </li>
               <li><i>automatic</i><br>
+                  <b>Works on zones only.</b>
                   Resets all temperature settings for a zone.
                   The plan defined in the cloud (either by app or browser) will be used to set the temperature</li>
+              <li><i>off</i><br>
+                  <b>Works on zones only.</b>
+                  Turns the heating in the specific zone completely off.
+                  The setting will be kept until a new temperature is defined via app, browser or FHEM.
+              <li><i>temperature</i><br>
+                  <b>Works on zones only.</b>
+                  Sets the temperature for a zone.
+                  The setting will be kept until a new temperature is defined via app, browser or FHEM.
+                  Value can be <i>off</i> or any numeric value between 4.0 and 25.0 with a precision of 0.1 degree.
               <li><i>temperature-for-60</i><br>
+                  <b>Works on zones only.</b>
                   Sets the temperature for a zone for 60 minutes only.
-                  The temperature will be kept for 60 minutes. Afterwards the zone will fall back to the standard plan defined in app or web.</li>
+                  The temperature will be kept for 60 minutes. Afterwards the zone will fall back to the standard plan defined in app or web. Value definition is like for command <i>set temperature</i>.</li>
              <li><i>temperature-for-90</i><br>
+                  <b>Works on zones only.</b>
                    Sets the temperature for a zone for 90 minutes only.
-                  The temperature will be kept for 90 minutes. Afterwards the zone will fall back to the standard plan defined in app or web.</li>
+                  The temperature will be kept for 90 minutes. Afterwards the zone will fall back to the standard plan defined in app or web. Value definition is like for command <i>set temperature</i>.</li>
              <li><i>temperature-for-120</i><br>
-                   Sets the temperature for a zone for 120 minutes only.
-                  The temperature will be kept for 120 minutes. Afterwards the zone will fall back to the standard plan defined in app or web.</li>
+                  <b>Works on zones only.</b>
+                  Sets the temperature for a zone for 120 minutes only.
+                  The temperature will be kept for 120 minutes. Afterwards the zone will fall back to the standard plan defined in app or web. Value definition is like for command <i>set temperature</i>.</li>
               <li><i>temperature-for-180</i><br>
+                  <b>Works on zones only.</b>
                   Sets the temperature for a zone for 180 minutes only.
-                  The temperature will be kept for 180 minutes. Afterwards the zone will fall back to the standard plan defined in app or web.</li>
+                  The temperature will be kept for 180 minutes. Afterwards the zone will fall back to the standard plan defined in app or web. Value definition is like for command <i>set temperature</i>.</li>
              <li><i>temperature-for-240</i><br>
+                  <b>Works on zones only.</b>
                    Sets the temperature for a zone for 240 minutes only.
-                  The temperature will be kept for 240 minutes. Afterwards the zone will fall back to the standard plan defined in app or web.</li>
+                  The temperature will be kept for 240 minutes. Afterwards the zone will fall back to the standard plan defined in app or web. Value definition is like for command <i>set temperature</i>.</li>
              <li><i>temperature-for-300</i><br>
-                   Sets the temperature for a zone for 300 minutes only.
-                  The temperature will be kept for 300 minutes. Afterwards the zone will fall back to the standard plan defined in app or web.</li>                    
+                  <b>Works on zones only.</b>
+                  Sets the temperature for a zone for 300 minutes only.
+                  The temperature will be kept for 300 minutes. Afterwards the zone will fall back to the standard plan defined in app or web. Value definition is like for command <i>set temperature</i>.</li>                    
         </ul>
     </ul>
     <br>
@@ -213,6 +229,14 @@ The 98_TadoDevice.pm contains the code to define the different TadoDevices. The 
         <code>get &lt;name&gt; &lt;option&gt;</code>
         <br><br>
         The only available <i>get</i> function is called <b>update</b> and can be used to update all readings of the specific TadoDevice.
+        <br><br>
+        Options:
+        <ul>
+            <li><i>Update</i><br>
+            <b>This <i>get</i> command is available on zones, weather and mobile devices</b>
+            This call updates the readings of a <i>TadoDevie</i> with the latest values available in the Tado cloud.
+            </li>
+        </ul>
     </ul>
     <br>    
     <a name="TadoDeviceattr"></a>
