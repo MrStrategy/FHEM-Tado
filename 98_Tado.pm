@@ -122,12 +122,7 @@ sub Tado_Define($$)
 	$hash->{INTERVAL} = $interval;
 
 	readingsSingleUpdate($hash,'state','Undefined',0);
-# 	$hash->{STATE} = "Undefined";
 
-# 	$attr{$name}{generateDevices} = "no" if( !defined( $attr{$name}{generateDevices} ) );
-# 	$attr{$name}{generateMobileDevices} = "no" if( !defined( $attr{$name}{generateMobileDevices} ) );
-# 	$attr{$name}{generateWeather} = "no" if( !defined( $attr{$name}{generateWeather} ) );
-	
 	CommandAttr(undef,$name.' generateDevices no') if ( AttrVal($name,'generateDevices','none') eq 'none' );
 	CommandAttr(undef,$name.' generateMobileDevices no') if ( AttrVal($name,'generateMobileDevices','none') eq 'none' );
 	CommandAttr(undef,$name.' generateWeather no') if ( AttrVal($name,'generateWeather','none') eq 'none' );
@@ -269,7 +264,7 @@ sub Tado_Set($@)
 
 	if ($opt eq "start")	{
 
-		$hash->{STATE} = 'Started';
+		readingsSingleUpdate($hash,'state','Started',0);
 		RemoveInternalTimer($hash);
 
 		$hash->{LOCAL} = 1;
@@ -285,7 +280,7 @@ sub Tado_Set($@)
 
 		RemoveInternalTimer($hash);
 		Log3 $name, 1, "Tado_Set $name: Stopped the timer to automatically update readings";
-		$hash->{STATE} = 'Initialized';
+		readingsSingleUpdate($hash,'state','Initialized',0);
 		return undef;
 
 	} elsif ($opt eq "interval"){
@@ -330,51 +325,54 @@ sub Tado_GetHomesAndDevices($)
 
 	if (defined $d && ref($d) eq "HASH" && defined $d->{errors}){
 
-		$hash->{STATE} = "Error: $d->{errors}[0]->{code} / $d->{errors}[0]->{title}";
+		readingsSingleUpdate($hash,'state',"Error: $d->{errors}[0]->{code} / $d->{errors}[0]->{title}",1);
 		return undef;
 
 	} else {
 
+    my $saveDeviceName = makeDeviceName($d->{homes}[0]->{name});
 		readingsBeginUpdate($hash);
 		readingsBulkUpdate($hash, "HomeID", $d->{homes}[0]->{id} );
-		readingsBulkUpdate($hash, "HomeName", makeDeviceName($d->{homes}[0]->{name}));
+		readingsBulkUpdate($hash, "HomeName", $saveDeviceName );
 		readingsEndUpdate($hash, 1);
 
-		$hash->{HomeID} = $d->{homes}[0]->{id};
-		$hash->{HomeName} = $d->{homes}[0]->{name};
+		#$hash->{HomeID} = $d->{homes}[0]->{id};
+		#$hash->{HomeName} = $d->{homes}[0]->{name};
 
-		Log3 $name, 1, "New Tado Home defined. Id: $hash->{HomeID} Name: $hash->{HomeName}";
+		Log3 $name, 1, "New Tado Home defined. Id: $d->{homes}[0]->{id} Name: $saveDeviceName";
 
-
+    # This code should not be called, as TADO states in the FAQ they're currently just supporting one single home.
 		if (scalar (@{$d->{homes}}) > 1 ){
+		 $saveDeviceName = makeDeviceName($d->{homes}[1]->{name});
 			readingsBeginUpdate($hash);
 			readingsBulkUpdate($hash, "HomeID_2", $d->{homes}[1]->{id} );
-			readingsBulkUpdate($hash, "HomeName_2",  makeDeviceName($d->{homes}[1]->{name}));
+			readingsBulkUpdate($hash, "HomeName_2",  $saveDeviceName);
 			readingsEndUpdate($hash, 1);
 
-			$hash->{HomeID_2} = $d->{homes}[1]->{id};
-			$hash->{HomeName_2} = $d->{homes}[1]->{name};
-			Log3 $name, 1, "New Tado Home defined. Id: $hash->{HomeID_2} Name: $hash->{HomeName_2}";
+		#	$hash->{HomeID_2} = $d->{homes}[1]->{id};
+	  #	$hash->{HomeName_2} = $d->{homes}[1]->{name};
+			Log3 $name, 1, "New Tado Home defined. Id: $hash->{HomeID_2} Name: $saveDeviceName";
 		}
 
-		if (scalar (@{$d->{mobileDevices}}) > 0 ){
-			readingsBeginUpdate($hash);
-			for (my $mobileDeviceCounter = 0; $mobileDeviceCounter < scalar (@{$d->{mobileDevices}}); $mobileDeviceCounter++){
-				my $deviceId_Fieldname = "MobileDevice_".$mobileDeviceCounter."_id";
-				my $deviceName_Fieldname = "MobileDevice_".$mobileDeviceCounter."_Name";
-				readingsBulkUpdate($hash, $deviceId_Fieldname, $d->{mobileDevices}[$mobileDeviceCounter]->{id} );
-				readingsBulkUpdate($hash, $deviceName_Fieldname , makeDeviceName($d->{mobileDevices}[$mobileDeviceCounter]->{name}));
 
+		# if (scalar (@{$d->{mobileDevices}}) > 0 ){
+		# 	readingsBeginUpdate($hash);
+		# 	for (my $mobileDeviceCounter = 0; $mobileDeviceCounter < scalar (@{$d->{mobileDevices}}); $mobileDeviceCounter++){
+		# 		my $deviceId_Fieldname = "MobileDevice_".$mobileDeviceCounter."_id";
+		# 		my $deviceName_Fieldname = "MobileDevice_".$mobileDeviceCounter."_Name";
+		# 		readingsBulkUpdate($hash, $deviceId_Fieldname, $d->{mobileDevices}[$mobileDeviceCounter]->{id} );
+		# 		readingsBulkUpdate($hash, $deviceName_Fieldname , makeDeviceName($d->{mobileDevices}[$mobileDeviceCounter]->{name}));
+		#
+		#
+		# 		$hash->{$deviceId_Fieldname} = $d->{mobileDevices}[$mobileDeviceCounter]->{id};
+		# 		$hash->{$deviceName_Fieldname} = makeDeviceName($d->{mobileDevices}[$mobileDeviceCounter]->{name});
+		#
+		# 		Log3 $name, 1, "New Tado Device defined. Id: $hash->{$deviceId_Fieldname} Name: $hash->{$deviceName_Fieldname}";
+		# 	}
+		# 	readingsEndUpdate($hash, 1);
+		# }
 
-				$hash->{$deviceId_Fieldname} = $d->{mobileDevices}[$mobileDeviceCounter]->{id};
-				$hash->{$deviceName_Fieldname} = makeDeviceName($d->{mobileDevices}[$mobileDeviceCounter]->{name});
-
-				Log3 $name, 1, "New Tado Device defined. Id: $hash->{$deviceId_Fieldname} Name: $hash->{$deviceName_Fieldname}";
-			}
-			readingsEndUpdate($hash, 1);
-		}
-
-		$hash->{STATE} = 'Initialized';
+		readingsSingleUpdate($hash,'state','Initialized',0);
 		return undef;
 	}
 
@@ -392,7 +390,8 @@ sub Tado_GetZones($)
 		return $msg;
 	}
 
-	if (not defined $hash->{"HomeID"}){
+  my $homeID = ReadingsVal ($name,"HomeID",undef);
+	if (not defined $homeID) {
 		my $msg = "Error on Tado_GetZones. Missing HomeID. Please define Home first.";
 		Log3 'Tado', 1, $msg;
 		return $msg;
@@ -404,7 +403,7 @@ sub Tado_GetZones($)
 	my $user = urlEncode($hash->{Username});
 
 
-	$readTemplate =~ s/#HomeID#/$hash->{HomeID}/g;
+	$readTemplate =~ s/#HomeID#/$homeID/g;
 	$readTemplate =~ s/#Username#/$user/g;
 	$readTemplate =~ s/#Password#/$passwd/g;
 
@@ -413,20 +412,22 @@ sub Tado_GetZones($)
 
 	if (defined $d && ref($d) eq "HASH" && defined $d->{errors}){
 		log 1, Dumper $d;
-		$hash->{STATE} = "Error: $d->{errors}[0]->{code} / $d->{errors}[0]->{title}";
+		readingsSingleUpdate($hash,"Error: $d->{errors}[0]->{code} / $d->{errors}[0]->{title}",'Undefined',1);
 		return undef;
 
 	} else {
 
 		readingsBeginUpdate($hash);
 
-		$hash->{ZoneCount} = 0;
+		my $ZoneCount = 0;
+
     my %ZoneIds = ();
 
   	for my $item( @{$d} ){
 
-			$hash->{ZoneCount} = $hash->{ZoneCount} +1;
-			Log3 $name, 4, "Tado_GetZones ($name): zonecount is $hash->{ZoneCount}";
+			$ZoneCount += 1;
+			readingsBulkUpdate($hash, "ZoneCount", $ZoneCount);
+			Log3 $name, 4, "Tado_GetZones ($name): zonecount is $ZoneCount";
 
       my $deviceName = makeDeviceName($item->{name});
 
@@ -437,27 +438,9 @@ sub Tado_GetZones($)
 
      Log3 'Tado', 4, "While updating zones (displays variable): ".Dumper \%ZoneIds;
 
-			readingsBulkUpdate($hash, "Zone_" . $item->{id} . "_ID"  , $item->{id} );
 			readingsBulkUpdate($hash, "Zone_" . $item->{id} . "_Name"  ,  $deviceName );
-			readingsBulkUpdate($hash, "Zone_" . $item->{id} . "_Type"  , $item->{type} );
-			readingsBulkUpdate($hash, "Zone_" . $item->{id} . "_DateCreated"  , $item->{dateCreated} );
-			readingsBulkUpdate($hash, "Zone_" . $item->{id} . "_SupportsDazzle"  , $item->{supportsDazzle} );
 
-			# Seems zone 0 is reported last
-			# needs to be ensured highest zone id is taken into zones value
-			if (not defined $hash->{Zones}) {
-				$hash->{Zones} = $item->{id};
-			} elsif ($hash->{Zones} < $item->{id}) {
-				$hash->{Zones} = $item->{id};
-			}
-
-			$hash->{"Zone_" . $item->{id} . "_ID"} = $item->{id};
-			$hash->{"Zone_" . $item->{id} . "_Name"} =  makeDeviceName($item->{name});
-			$hash->{"Zone_" . $item->{id} . "_Type"} = $item->{type};
-			$hash->{"Zone_" . $item->{id} . "_DateCreated"} = $item->{dateCreated};
-			$hash->{"Zone_" . $item->{id} . "_SupportsDazzle"} = $item->{supportsDazzle};
-
-
+			#$hash->{"Zone_" . $item->{id} . "_Name"} =  makeDeviceName($item->{name});
 
 			my $code = $name ."-". $item->{id};
 
@@ -486,6 +469,14 @@ sub Tado_GetZones($)
 
 			}
 
+       #Independent if the device was created or not all internals of the device must be Updated
+			 my $deviceHash = $modules{TadoDevice}{defptr}{$code};
+	     $deviceHash->{originalName} = $item->{name};
+			 $deviceHash->{TadoType} = $item->{Type};
+
+			readingsSingleUpdate($deviceHash, "date_created"  , $item->{dateCreated} , 1);
+	 		readingsSingleUpdate($deviceHash, "supports_dazzle"  , $item->{supportsDazzle}, 1 );
+
 		}
 
     $hash->{ZoneIDs} = join(", ", keys %ZoneIds);
@@ -512,13 +503,21 @@ sub Tado_GetDevices($)
 		return $msg;
 	}
 
+
+	my $homeID = ReadingsVal ($name,"HomeID",undef);
+	if (not defined $homeID) {
+		my $msg = "Error on Tado_GetDevices. Missing HomeID. Please define Home first.";
+		Log3 'Tado', 1, $msg;
+		return $msg;
+	}
+
 	my $readTemplate = $url{"getDevices"};
 
 	my $passwd = urlEncode(tado_decrypt($hash->{Password}));
 	my $user = urlEncode($hash->{Username});
 
 
-	$readTemplate =~ s/#HomeID#/$hash->{HomeID}/g;
+	$readTemplate =~ s/#HomeID#/$homeID/g;
 	$readTemplate =~ s/#Username#/$user/g;
 	$readTemplate =~ s/#Password#/$passwd/g;
 
@@ -527,7 +526,7 @@ sub Tado_GetDevices($)
 
 	if (defined $d && ref($d) eq "HASH" && defined $d->{errors}){
 		log 1, Dumper $d;
-		$hash->{STATE} = "Error: $d->{errors}[0]->{code} / $d->{errors}[0]->{title}";
+		readingsSingleUpdate($hash,'state',"Error: $d->{errors}[0]->{code} / $d->{errors}[0]->{title}",1);
 		return undef;
 
 	} else {
@@ -540,20 +539,21 @@ sub Tado_GetDevices($)
 
 		for my $item( @{$d} ){
 			$count++;
-			$hash->{DeviceCount} = 	$count;
+      readingsBulkUpdate($hash, "DeviceCount", $count);
+      readingsBulkUpdate($hash, "Device_".$item->{serialNo} , $item->{deviceType});
 
 			my $code = $name ."-". $item->{serialNo};
 
 			if( defined($modules{TadoDevice}{defptr}{$code}) )
 			{
-				Log3 $name, 5, "Tado_GetDevices ($name): device id '$item->{id}' already defined as '$modules{TadoDevice}{defptr}{$code}->{NAME}'";
+				Log3 $name, 5, "Tado_GetDevices ($name): device id '$item->{serialNo}' already defined as '$modules{TadoDevice}{defptr}{$code}->{NAME}'";
 			} else {
 
 				my $deviceName = "Tado_" . $item->{serialNo};
 				$deviceName =~ s/ /_/g;
 				my $define= "$deviceName TadoDevice $item->{serialNo} IODev=$name";
 
-				Log3 $name, 1, "Tado_GetDevices ($name): create new device '$deviceName' for zone '$item->{id}'";
+				Log3 $name, 1, "Tado_GetDevices ($name): create new device '$deviceName' of type '$item->{deviceType}'";
 
 				my $cmdret= CommandDefine(undef,$define);
 
@@ -617,7 +617,7 @@ sub Tado_GetMobileDevices($)
 
 	if (defined $d && ref($d) eq "HASH" && defined $d->{errors}){
 		log 1, Dumper $d;
-		$hash->{STATE} = "Error: $d->{errors}[0]->{code} / $d->{errors}[0]->{title}";
+		readingsSingleUpdate($hash,'state',"Error: $d->{errors}[0]->{code} / $d->{errors}[0]->{title}",1);
 		return undef;
 
 	} else {
@@ -630,7 +630,9 @@ sub Tado_GetMobileDevices($)
 		my $count = 0;
 		for my $item( @{$d->{mobileDevices}} ){
 			$count++;
-			$hash->{MobileDeviceCount} = $count;
+			readingsBulkUpdate($hash, "MobileDeviceCount", $count);
+
+      readingsBulkUpdate($hash, "MobileDevice_".$item->{id} , $item->{name});
 
       Log3 $name, 2, "Tado_GetMobileDevices: Adding mobile device with id '$item->{id}' and name (with unsave characters) '$item->{name}'";
 
@@ -695,7 +697,8 @@ sub Tado_DefineWeatherChannel($)
 
 	}
 
-	if (not defined $hash->{"HomeID"}){
+	my $homeID = ReadingsVal ($name,"HomeID",undef);
+	if (not defined $homeID){
 		my $msg = "Error on Tado_DefineWeatherChannel. Missing HomeID. Please define Home first.";
 		Log3 'Tado', 1, $msg;
 		return $msg;
@@ -708,10 +711,6 @@ sub Tado_DefineWeatherChannel($)
 		Log3 'Tado', 1, $msg;
 		return $msg;
 	}
-
-
-
-
 
 
 	my $code = $name ."-weather";
@@ -751,16 +750,20 @@ sub Tado_GetEarlyStart($)
 	my $name = $hash->{NAME};
 
 	if (not defined $hash){
-		Log3 $name, 1, "Erro in Tado_GetEarlyStart: No zones defined. Define zones first." if (not defined $hash->{Zones});
+		Log3 $name, 1, "Erro in Tado_GetEarlyStart: No zones defined. Define zones first." if (not defined $hash->{ZoneIDs});
 		return undef;
 	}
 
-	my $it=1;
-	if (defined $hash->{"Zone_0_ID"}) {$it = 0;};
+	my $homeID = ReadingsVal ($name,"HomeID",undef);
+	if (not defined $homeID) {
+		my $msg = "Error on Tado_GetEarlyStart. Missing HomeID. Please define Home first.";
+		Log3 'Tado', 1, $msg;
+		return $msg;
+	}
 
 	Log3 $name, 3, "Getting status update on early start for $hash->{ZoneCount} zones.";
 
-	for (my $i=$it; $i <= $hash->{Zones}; $i++) {
+	foreach my $i (split /, /,  $hash->{ZoneIDs}) {
 
 		my $readTemplate = $url{earlyStart};
 
@@ -769,7 +772,7 @@ sub Tado_GetEarlyStart($)
 
 		my $ZoneName = "Zone_" . $i . "_ID";
 
-		$readTemplate =~ s/#HomeID#/$hash->{HomeID}/g;
+		$readTemplate =~ s/#HomeID#/$homeID/g;
 		$readTemplate =~ s/#ZoneID#/$hash->{$ZoneName}/g;
 		$readTemplate =~ s/#Username#/$user/g;
 		$readTemplate =~ s/#Password#/$passwd/g;
@@ -793,8 +796,8 @@ sub Tado_UpdateEarlyStartCallback($)
 
 	if($err ne "")                                                                                                      # wenn ein Fehler bei der HTTP Abfrage aufgetreten ist
 	{
-		Log3 $name, 3, "error while requesting ".$param->{url}." - $err";                                               # Eintrag fürs Log
-		readingsSingleUpdate($hash, "fullResponse", "ERROR", 0);
+		Log3 $name, 3, "error while requesting EarlyStart Information: ".$param->{url}." - $err";                                               # Eintrag fürs Log
+		readingsSingleUpdate($hash, "state", "ERROR", 1);
 		return undef;
 	}
 
@@ -819,7 +822,7 @@ sub Tado_UpdateEarlyStartCallback($)
 
 		if (defined $d && ref($d) eq "HASH" && defined $d->{errors}){
 			log 1, Dumper $d;
-			$hash->{STATE} = "Error: $d->{errors}[0]->{code} / $d->{errors}[0]->{title}";
+			readingsSingleUpdate($hash,'state',"Error: $d->{errors}[0]->{code} / $d->{errors}[0]->{title}",0);
 			return undef;
 		}
 
@@ -843,16 +846,21 @@ sub Tado_RequestEarlyStartUpdate($)
 	my $name = $hash->{NAME};
 
 	if (not defined $hash){
-		Log3 $name, 1, "Error in Tado_RequestEarlyStartUpdate: No zones defined. Define zones first." if (not defined $hash->{Zones});
+		Log3 $name, 1, "Error in Tado_RequestEarlyStartUpdate: No zones defined. Define zones first." if (not defined $hash->{ZoneIDs});
 		return undef;
 	}
 
-	Log3 $name, 3, "Getting status update on eraly start for $hash->{ZoneCount} zones.";
+	my $homeID = ReadingsVal ($name,"HomeID",undef);
+	if (not defined $homeID) {
+		my $msg = "Error on Tado_RequestEarlyStartUpdate. Missing HomeID. Please define Home first.";
+		Log3 'Tado', 1, $msg;
+		return $msg;
+	}
 
-	my $it=1;
-	if (defined $hash->{"Zone_0_ID"}) {$it = 0;};
 
-	for (my $i=$it; $i <= $hash->{Zones}; $i++) {
+	Log3 $name, 3, "Getting status update on early start for $hash->{ZoneCount} zones.";
+
+	foreach my $i (split /, /,  $hash->{ZoneIDs}) {
 
 		my $readTemplate = $url{earlyStart};
 
@@ -861,7 +869,7 @@ sub Tado_RequestEarlyStartUpdate($)
 
 		my $ZoneName = "Zone_" . $i . "_ID";
 
-		$readTemplate =~ s/#HomeID#/$hash->{HomeID}/g;
+		$readTemplate =~ s/#HomeID#/$homeID/g;
 		$readTemplate =~ s/#ZoneID#/$hash->{$ZoneName}/g;
 		$readTemplate =~ s/#Username#/$user/g;
 		$readTemplate =~ s/#Password#/$passwd/g;
@@ -892,7 +900,7 @@ sub Tado_UpdateWeatherCallback($)
 	if($err ne "")                                                                                                      # wenn ein Fehler bei der HTTP Abfrage aufgetreten ist
 	{
 		Log3 $name, 3, "error while requesting ".$param->{url}." - $err";                                               # Eintrag fürs Log
-		readingsSingleUpdate($hash, "fullResponse", "ERROR", 0);
+		readingsSingleUpdate($hash, "state", "ERROR", 1);
 		return undef;
 	}
 
@@ -915,7 +923,7 @@ sub Tado_UpdateWeatherCallback($)
 
 		if (defined $d && ref($d) eq "HASH" && defined $d->{errors}){
 			log 1, Dumper $d;
-			$hash->{STATE} = "Error: $d->{errors}[0]->{code} / $d->{errors}[0]->{title}";
+			readingsSingleUpdate($hash,'state',"Error: $d->{errors}[0]->{code} / $d->{errors}[0]->{title}",0);
 			return undef;
 		}
 
@@ -932,7 +940,7 @@ sub Tado_UpdateWeatherCallback($)
 		Log3 $name, 4, "$name: tried to dispatch message. Result: $found";
 
 		readingsBeginUpdate($hash);
-		readingsBulkUpdate($hash, "LastUpdate", localtime );
+		readingsBulkUpdate($hash, "LastUpdate_Weather", localtime );
 		readingsEndUpdate($hash, 1);
 
 		return undef;
@@ -952,7 +960,7 @@ sub Tado_UpdateMobileDeviceCallback($)
 	if($err ne "")                                                                                                      # wenn ein Fehler bei der HTTP Abfrage aufgetreten ist
 	{
 		Log3 $name, 3, "error while requesting ".$param->{url}." - $err";                                               # Eintrag fürs Log
-		readingsSingleUpdate($hash, "fullResponse", "ERROR", 0);
+		readingsSingleUpdate($hash, "state", "ERROR", 1);
 		return undef;
 	}
 
@@ -975,7 +983,7 @@ sub Tado_UpdateMobileDeviceCallback($)
 
 		if (defined $d && ref($d) eq "HASH" && defined $d->{errors}){
 			log 1, Dumper $d;
-			$hash->{STATE} = "Error: $d->{errors}[0]->{code} / $d->{errors}[0]->{title}";
+			readingsSingleUpdate($hash,'state',"Error: $d->{errors}[0]->{code} / $d->{errors}[0]->{title}",0);
 			return undef;
 		}
 
@@ -1033,6 +1041,13 @@ sub Tado_RequestWeatherUpdate($)
 		return undef;
 	}
 
+	my $homeID = ReadingsVal ($name,"HomeID",undef);
+if (not defined $homeID) {
+	my $msg = "Error on Tado_RequestWeatherUpdate. Missing HomeID. Please define Home first.";
+	Log3 'Tado', 1, $msg;
+	return $msg;
+}
+
 	my $isEnabled = AttrVal($name, 'generateWeather', 'yes');
 	if ($isEnabled eq 'no') {
 		my $msg = "Attribute 'generateWeather' is set to no. Update will not be executed.";
@@ -1053,7 +1068,7 @@ sub Tado_RequestWeatherUpdate($)
 	my $passwd = urlEncode(tado_decrypt($hash->{Password}));
 	my $user = urlEncode($hash->{Username});
 
-	$readTemplate =~ s/#HomeID#/$hash->{HomeID}/g;
+	$readTemplate =~ s/#HomeID#/$homeID/g;
 	$readTemplate =~ s/#Username#/$user/g;
 	$readTemplate =~ s/#Password#/$passwd/g;
 
@@ -1125,7 +1140,7 @@ sub Tado_UpdateZoneCallback($)
 	if($err ne "")                                                                                                      # wenn ein Fehler bei der HTTP Abfrage aufgetreten ist
 	{
 		Log3 $name, 3, "error while requesting ".$param->{url}." - $err";                                               # Eintrag fürs Log
-		readingsSingleUpdate($hash, "fullResponse", "ERROR", 0);
+		readingsSingleUpdate($hash, "state", "ERROR", 1);
 		return undef;
 	}
 
@@ -1151,7 +1166,7 @@ sub Tado_UpdateZoneCallback($)
 
 		if (defined $d && ref($d) eq "HASH" && defined $d->{errors}){
 			log 1, Dumper $d;
-			$hash->{STATE} = "Error: $d->{errors}[0]->{code} / $d->{errors}[0]->{title}";
+			readingsSingleUpdate($hash,'state',"Error: $d->{errors}[0]->{code} / $d->{errors}[0]->{title}",1);
 			return undef;
 		}
 
@@ -1242,7 +1257,7 @@ sub Tado_UpdateZoneCallback($)
 		Log3 $name, 4, "$name: tried to dispatch message. Result: $found";
 
 		readingsBeginUpdate($hash);
-		readingsBulkUpdate($hash, "LastUpdate", localtime );
+		readingsBulkUpdate($hash, "LastUpdate_Zones", localtime );
 		readingsEndUpdate($hash, 1);
 
 		return undef;
@@ -1264,7 +1279,7 @@ sub Tado_UpdateDueToTimer($)
 		RemoveInternalTimer($hash);
 		#Log3 "Test", 1, Dumper($hash);
 		InternalTimer(gettimeofday()+$hash->{INTERVAL}, "Tado_UpdateDueToTimer", $hash);
-		$hash->{STATE} = 'Polling';
+		readingsSingleUpdate($hash,'state','Polling',0);
 	}
 
 	Tado_RequestZoneUpdate($hash);
@@ -1284,14 +1299,22 @@ sub Tado_RequestZoneUpdate($)
 		return undef;
 	}
 
-	if (not defined $hash->{Zones}){
+	if (not defined $hash->{ZoneIDs}){
 		Log3 'Tado', 1, "Error on Tado_RequestZoneUpdate. Missing zones. Please define zones first.";
 		return undef;
 	}
 
+	my $homeID = ReadingsVal ($name,"HomeID",undef);
+ if (not defined $homeID) {
+	my $msg = "Error on Tado_RequestZoneUpdate. Missing HomeID. Please define Home first.";
+	Log3 'Tado', 1, $msg;
+	return $msg;
+ }
+
 	Log3 $name, 4, "Tado_RequestZoneUpdate Called for non-blocking value update. Name: $name";
 
-	Log3 $name, 3, "Getting zone update for $hash->{ZoneCount} zones.";
+
+	Log3 $name, 3, sprintf ("Getting zone update for %s zones.", ReadingsVal($name, "ZoneCount", 0 ));
 
   Log3 $name, 3, "Array out of zone ids: ". Dumper(split /, /,  $hash->{ZoneIDs});
 
@@ -1305,10 +1328,9 @@ sub Tado_RequestZoneUpdate($)
 		my $passwd = urlEncode(tado_decrypt($hash->{Password}));
 		my $user = urlEncode($hash->{Username});
 
-		my $ZoneName = "Zone_" . $i . "_ID";
 
-		$readTemplate =~ s/#HomeID#/$hash->{HomeID}/g;
-		$readTemplate =~ s/#ZoneID#/$hash->{$ZoneName}/g;
+		$readTemplate =~ s/#HomeID#/$homeID/g;
+		$readTemplate =~ s/#ZoneID#/$i/g;
 		$readTemplate =~ s/#Username#/$user/g;
 		$readTemplate =~ s/#Password#/$passwd/g;
 
@@ -1346,7 +1368,9 @@ sub Tado_Write ($$)
 		my $passwd = urlEncode(tado_decrypt($hash->{Password}));
 		my $user = urlEncode($hash->{Username});
 
-		$readTemplate =~ s/#HomeID#/$hash->{HomeID}/g;
+		my $homeID = ReadingsVal ($name,"HomeID",undef);
+
+		$readTemplate =~ s/#HomeID#/$homeID/g;
 		$readTemplate =~ s/#ZoneID#/$zoneID/g;
 		$readTemplate =~ s/#Username#/$user/g;
 		$readTemplate =~ s/#Password#/$passwd/g;
@@ -1389,7 +1413,9 @@ sub Tado_Write ($$)
 		my $passwd = urlEncode(tado_decrypt($hash->{Password}));
 		my $user = urlEncode($hash->{Username});
 
-		$readTemplate =~ s/#HomeID#/$hash->{HomeID}/g;
+		my $homeID = ReadingsVal ($name,"HomeID",undef);
+
+		$readTemplate =~ s/#HomeID#/$homeID/g;
 		$readTemplate =~ s/#ZoneID#/$zoneID/g;
 		$readTemplate =~ s/#Username#/$user/g;
 		$readTemplate =~ s/#Password#/$passwd/g;
