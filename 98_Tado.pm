@@ -418,14 +418,24 @@ sub Tado_GetZones($)
 		readingsBeginUpdate($hash);
 
 		$hash->{ZoneCount} = 0;
+    my %ZoneIds = ();
 
-		for my $item( @{$d} ){
+  	for my $item( @{$d} ){
 
 			$hash->{ZoneCount} = $hash->{ZoneCount} +1;
 			Log3 $name, 4, "Tado_GetZones ($name): zonecount is $hash->{ZoneCount}";
 
+      my $deviceName = makeDeviceName($item->{name});
+
+			if (not exists $ZoneIds{$item->{id}})
+			{
+					$ZoneIds{$item->{id}} = $deviceName;
+			}
+
+     Log3 'Tado', 4, "While updating zones (displays variable): ".Dumper \%ZoneIds;
+
 			readingsBulkUpdate($hash, "Zone_" . $item->{id} . "_ID"  , $item->{id} );
-			readingsBulkUpdate($hash, "Zone_" . $item->{id} . "_Name"  ,  makeDeviceName($item->{name}) );
+			readingsBulkUpdate($hash, "Zone_" . $item->{id} . "_Name"  ,  $deviceName );
 			readingsBulkUpdate($hash, "Zone_" . $item->{id} . "_Type"  , $item->{type} );
 			readingsBulkUpdate($hash, "Zone_" . $item->{id} . "_DateCreated"  , $item->{dateCreated} );
 			readingsBulkUpdate($hash, "Zone_" . $item->{id} . "_SupportsDazzle"  , $item->{supportsDazzle} );
@@ -475,8 +485,9 @@ sub Tado_GetZones($)
 
 		}
 
-
-
+    $hash->{ZoneIDs} = join(", ", keys %ZoneIds);
+		Log3 'Tado', 3, "After Updating zones: ".Dumper $hash->{ZoneIDs};
+		#Log3 'Tado', 1, "Hashdump: ".Dumper $hash;
 		readingsEndUpdate($hash, 1);
 		return undef;
 
@@ -521,10 +532,12 @@ sub Tado_GetDevices($)
 
 		readingsBeginUpdate($hash);
 
+
 		my $count = 0;
+
 		for my $item( @{$d} ){
 			$count++;
-			$hash->{Devices} = $item->{$count};
+			$hash->{DeviceCount} = 	$count;
 
 			my $code = $name ."-". $item->{serialNo};
 
@@ -609,10 +622,19 @@ sub Tado_GetMobileDevices($)
 
 		readingsBeginUpdate($hash);
 
+    my %MobileDeviceIds = ();
+
 		my $count = 0;
 		for my $item( @{$d->{mobileDevices}} ){
 			$count++;
-			$hash->{MobileDevices} = $item->{$count};
+			$hash->{MobileDeviceCount} = $count;
+
+      Log3 $name, 2, "Tado_GetMobileDevices: Adding mobile device with id '$item->{id}' and name (with unsave characters) '$item->{name}'";
+
+			if (not exists $MobileDeviceIds{$item->{id}})
+					{
+							$MobileDeviceIds{$item->{id}} = $item->{name};
+					}
 
 			my $code = $name ."-". $item->{id};
 
@@ -646,7 +668,13 @@ sub Tado_GetMobileDevices($)
 				}
 			}
 		}
+
+		$hash->{MobileDeviceIDs} = join(", ", keys %MobileDeviceIds);
+		Log3 'Tado', 3, "After Updating mobile device ids: ".Dumper $hash->{ZoneIDs};
+
 	}
+
+
 	readingsEndUpdate($hash, 1);
 	Tado_RequestMobileDeviceUpdate($hash);
 	return undef;
@@ -951,12 +979,19 @@ sub Tado_UpdateMobileDeviceCallback($)
 		for my $item( @{$d->{mobileDevices}} ){
 
 			my $message = "Tado;$item->{id};locationdata;"
-			. $item->{settings}->{geoTrackingEnabled}. ";"
-			. $item->{location}->{stale}. ";"
+			. $item->{settings}->{geoTrackingEnabled}. ";";
+
+			if ($item->{settings}->{geoTrackingEnabled})
+			{
+			$message .= $item->{location}->{stale}. ";"
 			. $item->{location}->{atHome}. ";"
 			. $item->{location}->{bearingFromHome}->{degrees}. ";"
 			. $item->{location}->{bearingFromHome}->{radians}. ";"
 			. $item->{location}->{relativeDistanceFromHomeFence}. ";";
+		} else {
+			$message .= ";;;;;"
+		}
+
 
 			if (defined $item->{settings}->{pushNotifications})
 			{
@@ -969,7 +1004,7 @@ sub Tado_UpdateMobileDeviceCallback($)
 				$message .=";;;;"
 			}
 
-			Log3 $name, 4, "$name: trying to dispatch message: $message";
+			Log3 $name, 2, "$name: trying to dispatch message: $message";
 			my $found = Dispatch($hash, $message);
 			Log3 $name, 4, "$name: tried to dispatch message. Result: $found";
 		}
@@ -1253,14 +1288,14 @@ sub Tado_RequestZoneUpdate($)
 
 	Log3 $name, 4, "Tado_RequestZoneUpdate Called for non-blocking value update. Name: $name";
 
-
-
 	Log3 $name, 3, "Getting zone update for $hash->{ZoneCount} zones.";
 
-	my $it=1;
-	if (defined $hash->{"Zone_0_ID"}) {$it = 0;};
+  Log3 $name, 3, "Array out of zone ids: ". Dumper(split /, /,  $hash->{ZoneIDs});
 
-	for (my $i=$it; $i <= $hash->{Zones}; $i++) {
+
+	foreach my $i (split /, /,  $hash->{ZoneIDs}) {
+
+    Log3 $name, 3, "Updating zone id: ". $i;
 
 		my $readTemplate = $url{"getZoneTemperature"};
 
@@ -1326,7 +1361,7 @@ sub Tado_Write ($$)
 				$message{'setting'}{'temperature'} {'celsius'} =  $temperature + 0 ;
 			}
 		}
-		
+
 		if ($duration eq "0") {
 			$message{'termination'}{'type'}  = 'MANUAL';
 		} elsif ($duration eq 'Auto') {

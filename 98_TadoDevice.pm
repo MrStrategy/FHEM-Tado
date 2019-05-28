@@ -299,7 +299,6 @@ sub TadoDevice_Set($@)
 
 		my $temperature = shift @param;
 
-    if (not (looks_like_number($temperature) || $temperature eq 'off' )) {return "Unknown argument $temperature for $opt, choose one of auto off 5.0 5.5 10";}
 
 		if (not defined $temperature) {return "Missing temperature value. Please insert numeric value or lower case string 'off'"}
 		if (not (looks_like_number($temperature) || $temperature eq 'off' )) {return "Invalid temperature value. Please insert numeric value or lower case string 'off'"}
