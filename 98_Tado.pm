@@ -1479,97 +1479,127 @@ sub tado_decrypt($) {
 <a name="Tado"></a>
 <h3>Tado</h3>
 <ul>
-<i>Tado</i> implements an interface to the Tado cloud. The plugin can be used to read and write
-temperature and settings from or to the Tado cloud. The communication is based on the reengineering of the protocol done by
-Stephen C. Phillips. See <a href="http://blog.scphillips.com/posts/2017/01/the-tado-api-v2/">his blog</a> for more details.
-Not all functions are implemented within this FHEM extension. By now the plugin is capable to
-interact with the so called zones (rooms) and the registered devices. The devices cannot be
-controlled directly. All interaction - like setting a temperature - must be done via the zone and not the device.
-This means all configuration like the registration of new devices or the assignment of a device to a room
-must be done using the Tado app or Tado website directly. Once the configuration is completed this plugin can
-be used.
-This device is the 'bridge device' like a HueBridge or a CUL. Per zone or device a dedicated device of type
-'TadoDevice' will be created.
-<br><br>
-<a name="Tadodefine"></a>
-<b>Define</b>
-<ul>
-<code>define &lt;name&gt; Tado &lt;username&gt; &lt;password&gt; &lt;interval&gt;</code>
-<br><br>
-Example: <code>define TadoBridge Tado mail@provider.com somepassword 120</code>
-<br><br>
-The username and password must match the username and password used on the Tado website.
-Please be aware that username and password are stored and send as plain text. They are visible in FHEM user interface.
-It is recommended to create a dedicated user account for the FHEM integration.
-The Tado extension needs to pull the data from the Tado website. The 'Interval' value defines how often the value is refreshed.
-</ul>
-<br>
-
-<a name="Tasoset"></a>
-<b>Set</b><br>
-<ul>
-<code>set &lt;name&gt; &lt;option&gt;</code>
-<br><br>
-The <i>set</i> command just offers very limited options.
-If can be used to control the refresh mechanism. The plugin only evaluates
-the command. Any additional information is ignored.
-<br><br>
-Options:
-<ul>
-<li><i>interval</i><br>
-Sets how often the values shall be refreshed.
-This setting overwrites the value set during define.</li>
-<li><i>start</i><br>
-(Re)starts the automatic refresh.
-Refresh is autostarted on define but can be stopped using stop command. Using the start command FHEM will start polling again.</li>
-<li><i>stop</i><br>
-Stops the automatic polling used to refresh all values.</li>
-</ul>
-</ul>
-<br>
-
-<a name="Tadoget"></a>
-<b>Get</b><br>
-<ul>
-<code>get &lt;name&gt; &lt;option&gt;</code>
-<br><br>
-You can <i>get</i> the major information from the Tado cloud.
-<br><br>
-Options:
-<ul>
-<li><i>home</i><br>
-Gets the home identifier from Tado cloud.
-The home identifier is required for all further actions towards the Tado cloud.
-Currently the FHEM extension only supports a single home. If you have more than one home only the first home is loaded.
-<br/><b>This function is automatically executed once when a new Tado device is defined.</b></li>
-<li><i>zones</i><br>
-Every zone in the Tado cloud represents a room.
-This command gets all zones defined for the current home.
-Per zone a new FHEM device is created. The device can be used to display and
-overwrite the current temperatures.
-This command can always be executed to update the list of defined zones. It will not touch any existing
-zone but add new zones added since last update.
-<br/><b>This function is automatically executed once when a new Tado device is defined.</b></li>
-</li>
-<li><i>devices</i><br>
-Fetches all devices from Tado cloud and creates one TadoDevice instance
-per fetched device.
-This command can always be executed to update the list of defined devices.
-It will not touch existing devices but add new ones.
-</li>
-<li><i>update</i><br>
-Updates the values of all Tado zones - not the tado devices.</li>
-</ul>
-</ul>
-<br>
-
-<a name="Tadoattr"></a>
-<b>Attributes</b>
-<ul>
-<code>attr &lt;name&gt; &lt;attribute&gt; &lt;value&gt;</code>
-<br><br>
-No attributes so far...
-</ul>
+    <i>Tado</i> implements an interface to the Tado cloud. The plugin can be used to read and write
+    temperature and settings from or to the Tado cloud. The communication is based on the reengineering of the protocol done by
+    Stephen C. Phillips. See <a href="http://blog.scphillips.com/posts/2017/01/the-tado-api-v2/">his blog</a> for more details.
+    Not all functions are implemented within this FHEM extension. By now the plugin is capable to
+    interact with the so called zones (rooms) and the registered devices. The devices cannot be
+    controlled directly. All interaction - like setting a temperature - must be done via the zone and not the device.
+    This means all configuration like the registration of new devices or the assignment of a device to a room
+    must be done using the Tado app or Tado website directly. Once the configuration is completed this plugin can
+    be used.
+    This device is the 'bridge device' like a HueBridge or a CUL. Per zone or device a dedicated device of type
+    'TadoDevice' will be created.
+    <br><br>
+    <a name="Tadodefine"></a>
+    <b>Define</b>
+    <ul>
+        <code>define &lt;name&gt; Tado &lt;username&gt; &lt;password&gt; &lt;interval&gt;</code>
+        <br><br>
+        Example: <code>define TadoBridge Tado mail@provider.com somepassword 120</code>
+        <br><br>
+        The username and password must match the username and password used on the Tado website.
+        Please be aware that username and password are stored and send as plain text. They are visible in FHEM user interface.
+        It is recommended to create a dedicated user account for the FHEM integration.
+        The Tado extension needs to pull the data from the Tado website. The 'Interval' value defines how often the value is refreshed.
+    </ul>
+    <br>
+    <b>Set</b><br>
+    <ul>
+        <code>set &lt;name&gt; &lt;option&gt;</code>
+        <br><br>
+        The <i>set</i> command just offers very limited options.
+        If can be used to control the refresh mechanism. The plugin only evaluates
+        the command. Any additional information is ignored.
+        <br><br>
+        Options:
+        <ul>
+              <li><i>interval</i><br>
+                  Sets how often the values shall be refreshed.
+                  This setting overwrites the value set during define.</li>
+              <li><i>start</i><br>
+                  (Re)starts the automatic refresh.
+                  Refresh is autostarted on define but can be stopped using stop command. Using the start command FHEM will start polling again.</li>
+              <li><i>stop</i><br>
+                  Stops the automatic polling used to refresh all values.</li>
+        </ul>
+    </ul>
+    <br>
+    <a name="Tadoget"></a>
+    <b>Get</b><br>
+    <ul>
+        <code>get &lt;name&gt; &lt;option&gt;</code>
+        <br><br>
+        You can <i>get</i> the major information from the Tado cloud.
+ 	    	<br><br>
+        Options:
+        <ul>
+              <li><i>home</i><br>
+                  Gets the home identifier from Tado cloud.
+                  The home identifier is required for all further actions towards the Tado cloud.
+                  Currently the FHEM extension only supports a single home. If you have more than one home only the first home is loaded.
+                  <br/><b>This function is automatically executed once when a new Tado device is defined.</b></li>
+              <li><i>zones</i><br>
+                  Every zone in the Tado cloud represents a room.
+                  This command gets all zones defined for the current home.
+                  Per zone a new FHEM device is created. The device can be used to display and
+                  overwrite the current temperatures.
+                  This command can always be executed to update the list of defined zones. It will not touch any existing
+                  zone but add new zones added since last update.
+                  <br/><b>This function is automatically executed once when a new Tado device is defined.</b></li>
+                  </li>
+              <li><i>update</i><br/>
+                      Updates the values of: <br/>
+                      <ul>
+                         <li>All Tado zones</li>
+                         <li>All mobile devices - if attribute <i>generateMobileDevices</i> is set to true</li>
+                         <li>The weather device - if attribute <i>generateWeather</i> is set to true</li>
+                      </ul>
+                      This command triggers a single update not a continuous refresh of the values.
+                  </li>
+              <li><i>devices</i><br/>
+                  Fetches all devices from Tado cloud and creates one TadoDevice instance
+                  per fetched device. This command will only be executed if the attribute <i>generateDevices</i> is set to <i>yes</i>. If the attribute is set to <i>no</i> or not existing an error message will be displayed and no communication towards Tado will be done.
+                  This command can always be executed to update the list of defined devices.
+                  It will not touch existing devices but add new ones.
+                  Devices will not be updated automatically as there are no values continuously changing.
+                  </li>
+              <li><i>mobile_devices</i><br/>
+                  Fetches all defined mobile devices from Tado cloud and creates one TadoDevice instance
+                  per mobile device. This command will only be executed if the attribute <i>generateMobileDevices</i> is set to <i>yes</i>. If the attribute is set to <i>no</i> or not existing an error message will be displayed and no communication towards Tado will be done.
+                  This command can always be executed to update the list of defined mobile devices.
+                  It will not touch existing devices but add new ones.
+              </li>
+              <li><i>weather</i><br/>
+                  Creates or updates an additional device for the data bridge containing the weather data provided by Tado. This command will only be executed if the attribute <i>generateWeather</i> is set to <i>yes</i>. If the attribute is set to <i>no</i> or not existing an error message will be displayed and no communication towards Tado will be done.
+              </li>
+        </ul>
+    </ul>
+    <br>
+    <a name="Tadoattr"></a>
+    <b>Attributes</b>
+    <ul>
+        <code>attr &lt;name&gt; &lt;attribute&gt; &lt;value&gt;</code>
+        <br><br>
+         You can change the behaviour of the Tado Device.
+         <br><br>
+         Attributes:
+         <ul>
+               <li><i>generateDevices</i><br>
+                   By default the devices are not fetched and displayed in FHEM as they don't offer much functionality.
+                   The functionality is handled by the zones not by the devices. But the devices offers an identification function <i>sayHi</i> to show a message on the specific display. If this function is required the Devices can be generated. Therefor the attribute <i>generateDevices</i> must be set to <i>yes</i>
+                   <br/><b>If this attribute is set to <i>no</i> or if the attribute is not existing no devices will be generated..</b>
+                </li>
+                <li><i>generateMobileDevices</i><br>
+                    By default the mobile devices are not fetched and displayed in FHEM as most users already have a person home recognition. If Tado shall be used to identify if a mobile device is at home this can be done using the mobile devices. In this case the mobile devices can be generated. Therefor the attribute <i>generateMobileDevices</i> must be set to <i>yes</i>
+                    <br/><b>If this attribute is set to <i>no</i> or if the attribute is not existing no mobile devices will be generated..</b>
+                 </li>
+                 <li><i>generateWeather</i><br>
+                     By default no weather channel is generated. If you want to use the weather as it is defined by the tado system for your specific environment you must set this attribute. If the attribute <i>generateWeather</i> is set to <i>yes</i> an additional weather channel can be generated.
+                     <br/><b>If this attribute is set to <i>no</i> or if the attribute is not existing no Devices will be generated..</b>
+                  </li>
+          </ul>
+    </ul>
 </ul>
 
 =end html
