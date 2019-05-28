@@ -1,5 +1,6 @@
 package main;
 
+use strict;
 use warnings;
 use Data::Dumper;
 use utf8;
