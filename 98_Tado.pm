@@ -1,8 +1,5 @@
 package main;
-use strict;
-use warnings;
 
-use strict;
 use warnings;
 use Data::Dumper;
 use utf8;
@@ -123,11 +120,16 @@ sub Tado_Define($$)
 	if( $interval < 5 ) { $interval = 5; }
 	$hash->{INTERVAL} = $interval;
 
-	$hash->{STATE} = "Undefined";
+	readingsSingleUpdate($hash,'state','Undefined',0);
+# 	$hash->{STATE} = "Undefined";
 
-	$attr{$name}{generateDevices} = "no" if( !defined( $attr{$name}{generateDevices} ) );
-	$attr{$name}{generateMobileDevices} = "no" if( !defined( $attr{$name}{generateMobileDevices} ) );
-	$attr{$name}{generateWeather} = "no" if( !defined( $attr{$name}{generateWeather} ) );
+# 	$attr{$name}{generateDevices} = "no" if( !defined( $attr{$name}{generateDevices} ) );
+# 	$attr{$name}{generateMobileDevices} = "no" if( !defined( $attr{$name}{generateMobileDevices} ) );
+# 	$attr{$name}{generateWeather} = "no" if( !defined( $attr{$name}{generateWeather} ) );
+	
+	CommandAttr(undef,$name.' generateDevices no') if ( AttrVal($name,'generateDevices','none') eq 'none' );
+	CommandAttr(undef,$name.' generateMobileDevices no') if ( AttrVal($name,'generateMobileDevices','none') eq 'none' );
+	CommandAttr(undef,$name.' generateWeather no') if ( AttrVal($name,'generateWeather','none') eq 'none' );
 
 	#Initial load of the homes
 	Tado_GetHomesAndDevices($hash);
