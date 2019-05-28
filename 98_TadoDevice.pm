@@ -87,7 +87,7 @@ sub TadoDevice_Define($$)
 		Log3 $name, 1, "Tado $name: no I/O device";
 	}
 
-	my $code = $hash->{IODev}->{NAME} . "-" . ReadingsVal($name, "TadoId", undef);
+	my $code = $hash->{IODev}->{NAME} . "-" . InternalVal($name, "TadoId", undef);
 
 	Log3 $name, 3, "Device Code is: " . $code;
 
@@ -107,7 +107,7 @@ sub TadoDevice_Undef($$)
 	my ($hash, $arg) = @_;
 	my $name = $hash->{NAME};
 
-	my $code = $hash->{IODev}->{NAME} . "-" . ReadingsVal($name, "TadoId", undef);
+	my $code = $hash->{IODev}->{NAME} . "-" . InternalVal($name, "TadoId", undef);
 	delete($modules{TadoDevice}{defptr}{$code});
 
 	return undef;
@@ -255,7 +255,7 @@ sub TadoDevice_Get($@)
 	}
 
 	if ($opt eq "update")	{
-		IOWrite($hash, "Update", ReadingsVal($name, "TadoId", undef));
+		IOWrite($hash, "Update", InternalVal($name, "TadoId", undef));
 	}
 
 	return undef;
@@ -266,7 +266,7 @@ sub TadoDevice_Set($@)
 {
 	my ($hash, $name, @param) = @_;
 
-	return '"set $name" needs at least one argument' if (int(@param) < 1);
+	return "set $name needs at least one argument" if (int(@param) < 1);
 
 	my $opt = shift @param;
 	my $value = join("", @param);
@@ -290,11 +290,11 @@ sub TadoDevice_Set($@)
 	}
 
 	if ($opt eq "automatic")	{
-		IOWrite($hash, "Temp", ReadingsVal($name, "TadoId", undef) , "Auto");
+		IOWrite($hash, "Temp", InternalVal($name, "TadoId", undef) , "Auto");
 	} elsif ($opt eq "off")	{
-		IOWrite($hash, "Temp", ReadingsVal($name, "TadoId", undef), "0" , "off");
+		IOWrite($hash, "Temp", InternalVal($name, "TadoId", undef), "0" , "off");
 	} elsif ($opt eq "sayHi")	{
-		IOWrite($hash, "Hi", ReadingsVal($name, "TadoId", undef));
+		IOWrite($hash, "Hi", InternalVal($name, "TadoId", undef));
 	} else {
 
 		my $temperature = shift @param;
@@ -304,19 +304,19 @@ sub TadoDevice_Set($@)
 		if (not (looks_like_number($temperature) || $temperature eq 'off' )) {return "Invalid temperature value. Please insert numeric value or lower case string 'off'"}
 
 		if ($opt eq "temperature")	{
-			IOWrite($hash, "Temp", ReadingsVal($name, "TadoId", undef), "0" , $temperature);
+			IOWrite($hash, "Temp", InternalVal($name, "TadoId", undef), "0" , $temperature);
 		} elsif ($opt eq "temperature-for-60")	{
-			IOWrite($hash, "Temp", ReadingsVal($name, "TadoId", undef), "60" , $temperature);
+			IOWrite($hash, "Temp", InternalVal($name, "TadoId", undef), "60" , $temperature);
 		} elsif ($opt eq "temperature-for-90")	{
-			IOWrite($hash, "Temp", ReadingsVal($name, "TadoId", undef), "90" , $temperature);
+			IOWrite($hash, "Temp", InternalVal($name, "TadoId", undef), "90" , $temperature);
 		} elsif ($opt eq "temperature-for-120")	{
-			IOWrite($hash, "Temp", ReadingsVal($name, "TadoId", undef), "120" , $temperature);
+			IOWrite($hash, "Temp", InternalVal($name, "TadoId", undef), "120" , $temperature);
 		} elsif ($opt eq "temperature-for-180")	{
-			IOWrite($hash, "Temp", ReadingsVal($name, "TadoId", undef), "180" , $temperature);
+			IOWrite($hash, "Temp", InternalVal($name, "TadoId", undef), "180" , $temperature);
 		} elsif ($opt eq "temperature-for-240")	{
-			IOWrite($hash, "Temp", ReadingsVal($name, "TadoId", undef), "240" , $temperature);
+			IOWrite($hash, "Temp", InternalVal($name, "TadoId", undef), "240" , $temperature);
 		} elsif ($opt eq "temperature-for-300")	{
-			IOWrite($hash, "Temp", ReadingsVal($name, "TadoId", undef), "300" , $temperature);
+			IOWrite($hash, "Temp", InternalVal($name, "TadoId", undef), "300" , $temperature);
 		}
 	}
 }
@@ -340,7 +340,7 @@ sub TadoDevice_Attr(@)
 			}
 			Log3 $hash, 3, "TadoDevice: $name EarlyStart $aVal.";
 
-			my $ret = IOWrite($hash, "EarlyStart", ReadingsVal($name, "TadoId", undef), $aVal);
+			my $ret = IOWrite($hash, "EarlyStart", InternalVal($name, "TadoId", undef), $aVal);
 
 			if ($ret eq "0" or $ret eq "1"){
 				$hash->{EARLY_START} = $aVal;
@@ -350,7 +350,7 @@ sub TadoDevice_Attr(@)
 			}
 		} elsif ($cmd eq "del"){
 			Log3 $hash, 3, "TadoDevice: $name EarlyStart attribute was deleted. Setting earlyStart to false via Tado web API.";
-			my $ret = IOWrite($hash, "EarlyStart", ReadingsVal($name, "TadoId", undef), 'false');
+			my $ret = IOWrite($hash, "EarlyStart", InternalVal($name, "TadoId", undef), 'false');
 			if ($ret eq "0" or $ret eq "1"){
 				$hash->{EARLY_START} = 'false';
 				return undef;
