@@ -16,7 +16,7 @@ The 98_TadoDevice.pm contains the code to define the different TadoDevices. The 
 <li>- Add validation on inserted serial numbers</li>
 <li>- Add more flexible options to set a zone / room temperature</li>
 <li>- [bug] Add auto update to waether-channel</li>
-<li>- [bug] Request to update the values for early start is not working</li> 
+<li>- [bug] Request to update the values for early start is not working</li>
 </ul>
 
 
@@ -91,14 +91,31 @@ The 98_TadoDevice.pm contains the code to define the different TadoDevices. The 
                   zone but add new zones added since last update.
                   <br/><b>This function is automatically executed once when a new Tado device is defined.</b></li>
                   </li>
-              <li><i>devices</i><br>
+              <li><i>update</i><br/>
+                      Updates the values of: <br/>
+                      <ul>
+                         <li>All Tado zones</li>
+                         <li>All mobile devices - if attribute <i>generateMobileDevices</i> is set to true</li>
+                         <li>The weather device - if attribute <i>generateWeather</i> is set to true</li>
+                      </ul>
+                      This command triggers a single update not a continuous refresh of the values.  
+                  </li>              
+              <li><i>devices</i><br/>
                   Fetches all devices from Tado cloud and creates one TadoDevice instance
-                  per fetched device.
+                  per fetched device. This command will only be executed if the attribute <i>generateDevices</i> is set to <i>yes</i>. If the attribute is set to <i>no</i> or not existing an error message will be displayed and no communication towards Tado will be done.
                   This command can always be executed to update the list of defined devices.
                   It will not touch existing devices but add new ones.
+                  Devices will not be updated automatically as there are no values continuously changing.
                   </li>
-              <li><i>update</i><br>
-                  Updates the values of all Tado zones - not the tado devices.</li>
+              <li><i>mobile_devices</i><br/>
+                  Fetches all defined mobile devices from Tado cloud and creates one TadoDevice instance
+                  per mobile device. This command will only be executed if the attribute <i>generateMobileDevices</i> is set to <i>yes</i>. If the attribute is set to <i>no</i> or not existing an error message will be displayed and no communication towards Tado will be done.
+                  This command can always be executed to update the list of defined mobile devices.
+                  It will not touch existing devices but add new ones.
+              </li>
+              <li><i>weather</i><br/>
+                  Creates or updates an additional device for the data bridge containing the weather data provided by Tado. This command will only be executed if the attribute <i>generateWeather</i> is set to <i>yes</i>. If the attribute is set to <i>no</i> or not existing an error message will be displayed and no communication towards Tado will be done.</li>
+
         </ul>              
     </ul>
     <br>   
@@ -107,7 +124,24 @@ The 98_TadoDevice.pm contains the code to define the different TadoDevices. The 
     <ul>
         <code>attr &lt;name&gt; &lt;attribute&gt; &lt;value&gt;</code>
         <br><br>
-        No attributes so far...
+         You can change the behaviour of the Tado Device.
+         <br><br>
+         Attributes:
+         <ul>
+               <li><i>generateDevices</i><br>
+                   By default the devices are not fetched and displayed in FHEM as they don't offer much functionality.
+                   The functionality is handled by the zones not by the devices. But the devices offers an identification function <i>sayHi</i> to show a message on the specific display. If this function is required the Devices can be generated. Therefor the attribute <i>generateDevices</i> must be set to <i>yes</i>
+                   <br/><b>If this attribute is set to <i>no</i> or if the attribute is not existing no devices will be generated..</b>
+                </li>
+                <li><i>generateMobileDevices</i><br>
+                    By default the mobile devices are not fetched and displayed in FHEM as most users already have a person home recognition. If Tado shall be used to identify if a mobile device is at home this can be done using the mobile devices. In this case the mobile devices can be generated. Therefor the attribute <i>generateMobileDevices</i> must be set to <i>yes</i>
+                    <br/><b>If this attribute is set to <i>no</i> or if the attribute is not existing no mobile devices will be generated..</b>
+                 </li>
+                 <li><i>generateWeather</i><br>
+                     By default no weather channel is generated. If you want to use the weather as it is defined by the tado system for your specific environment you must set this attribute. If the attribute <i>generateWeather</i> is set to <i>yes</i> an additional weather channel can be generated.
+                     <br/><b>If this attribute is set to <i>no</i> or if the attribute is not existing no Devices will be generated..</b>
+                  </li>
+          </ul>
     </ul>
 </ul>
 <h3>TadoDevice</h3>
