@@ -226,6 +226,16 @@ sub TadoDevice_Parse ($$)
 
 			readingsEndUpdate($hash, 1);
 
+		} elsif ($values[2] eq 'airComfort') {
+			readingsBeginUpdate($hash);
+
+			readingsBulkUpdate($hash, "airComfort_temperatureLevel", $values[3] );
+			readingsBulkUpdate($hash, "airComfort_humidityLevel", $values[4] );
+			readingsBulkUpdate($hash, "airComfort_graph_radial", $values[5] );
+			readingsBulkUpdate($hash, "airComfort_graph_angular", $values[6] );
+
+			readingsEndUpdate($hash, 1);
+
 		}
 
 		# Rückgabe des Gerätenamens, für welches die Nachricht bestimmt ist.
