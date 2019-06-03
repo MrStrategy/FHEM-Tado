@@ -18,8 +18,7 @@ home	=> " ",
 zones	=> " ",
 devices  => " ",
 mobile_devices  => " ",
-weather => " ",
-airComfortUpdate => " "
+weather => " "
 );
 
 my %Tado_sets = (
@@ -1285,8 +1284,8 @@ sub Tado_UpdateAirComfortCallback($)
 		}
 
 		readingsBeginUpdate($hash);
-		readingsBulkUpdate($hash, "Freshness", $d->{freshness}->{value} );
-		readingsBulkUpdate($hash, "LastWindowOpen", $d->{freshness}->{lastOpenWindow} );
+		readingsBulkUpdate($hash, "airComfort_freshness", $d->{freshness}->{value} );
+		readingsBulkUpdate($hash, "airComfort_lastWindowOpen", $d->{freshness}->{lastOpenWindow} );
 		readingsEndUpdate($hash, 1);
 
 
