@@ -135,32 +135,32 @@ sub TadoDevice_Parse ($$)
 
 			readingsBeginUpdate($hash);
 
-			readingsBulkUpdate($hash, "measured-temp", $values[3] );
-			readingsBulkUpdate($hash, "measured-temp-timestamp", $values[4] );
-			readingsBulkUpdate($hash, "measured-temp-fahrenheit", $values[5] );
-			readingsBulkUpdate($hash, "measured-temp-precision", $values[6] );
-			readingsBulkUpdate($hash, "measured-temp-precision-fahrenheit", $values[7] );
-			readingsBulkUpdate($hash, "desired-temp", $values[8] );
+			readingsBulkUpdate($hash, "measured-temp", $values[3] ) if( defined($values[3]) && !($values[3] eq ''));
+			readingsBulkUpdate($hash, "measured-temp-timestamp", $values[4] ) if( defined($values[4]) && !($values[4] eq ''));
+			readingsBulkUpdate($hash, "measured-temp-fahrenheit", $values[5] ) if( defined($values[5]) && !($values[5] eq ''));
+			readingsBulkUpdate($hash, "measured-temp-precision", $values[6] ) if( defined($values[6]) && !($values[6] eq ''));
+			readingsBulkUpdate($hash, "measured-temp-precision-fahrenheit", $values[7] ) if( defined($values[7]) && !($values[7] eq ''));
+			readingsBulkUpdate($hash, "desired-temp", $values[8] ) if( defined($values[8]) && !($values[8] eq ''));
 
-			readingsBulkUpdate($hash, "measured-humidity", $values[9] );
-			readingsBulkUpdate($hash, "measured-humidity-timestamp", $values[10] );
+			readingsBulkUpdate($hash, "measured-humidity", $values[9] ) if( defined($values[9]) && !($values[9] eq ''));
+			readingsBulkUpdate($hash, "measured-humidity-timestamp", $values[10] ) if( defined($values[10]) && !($values[10] eq ''));
 
-			readingsBulkUpdate($hash, "link", $values[11] );
-			readingsBulkUpdate($hash, "open-window", $values[12] );
+			readingsBulkUpdate($hash, "link", $values[11] ) if( defined($values[11]) && !($values[11] eq ''));
+			readingsBulkUpdate($hash, "open-window", $values[12] ) if( defined($values[12]) && !($values[12] eq ''));
 
-			readingsBulkUpdate($hash, "heating-percentage", $values[13] );
-			readingsBulkUpdate($hash, "heating-percentage-timestamp", $values[14] );
+			readingsBulkUpdate($hash, "heating-percentage", $values[13] ) if( defined($values[13]) && !($values[13] eq ''));
+			readingsBulkUpdate($hash, "heating-percentage-timestamp", $values[14] ) if( defined($values[14]) && !($values[14] eq ''));
 
-			readingsBulkUpdate($hash, "nextScheduleChange-temperature", $values[15] );
-			readingsBulkUpdate($hash, "nextScheduleChange-power", $values[16] );
+			readingsBulkUpdate($hash, "nextScheduleChange-temperature", $values[15] ) if( defined($values[15]) && !($values[15] eq ''));
+			readingsBulkUpdate($hash, "nextScheduleChange-power", $values[16] ) if( defined($values[16]) && !($values[16] eq ''));
 
 
-			readingsBulkUpdate($hash, "nextScheduleChange-start", $values[17]);
+			readingsBulkUpdate($hash, "nextScheduleChange-start", $values[17]) if( defined($values[17]) && !($values[17] eq ''));
 
-			readingsBulkUpdate($hash, "overlay-active", $values[18]);
+			readingsBulkUpdate($hash, "overlay-active", $values[18]) if( defined($values[18]) && !($values[18] eq ''));
 
 			if ($values[18] eq "1"){
-				readingsBulkUpdate($hash, "overlay-mode", $values[19]);
+				readingsBulkUpdate($hash, "overlay-mode", $values[19]) ;
 				readingsBulkUpdate($hash, "overlay-power", $values[20]);
 				readingsBulkUpdate($hash, "overlay-desired-temperature", $values[21]);
 				readingsBulkUpdate($hash, "overlay-termination-mode", $values[22]);
@@ -183,9 +183,17 @@ sub TadoDevice_Parse ($$)
 
 			if ($values[11] eq 'ONLINE'){
 				if ($values[8] ne 'OFF') {
-					readingsSingleUpdate($hash, 'state', sprintf("T: %.1f &deg;C desired: %.1f &deg;C H: %.1f%%", $values[3], $values[8], $values[9]), 1);
+					if ($values[9] ne '') {
+						readingsSingleUpdate($hash, 'state', sprintf("T: %.1f &deg;C desired: %.1f &deg;C H: %.1f%%", $values[3], $values[8], $values[9]), 1);
+					} else {
+					  readingsSingleUpdate($hash, 'state', sprintf("T: %.1f &deg;C desired: %.1f &deg;C", $values[3], $values[8]), 1);
+					}
 				} else {
-					readingsSingleUpdate($hash, 'state', sprintf("T: %.1f &deg;C desired: off H: %.1f%%", $values[3],  $values[9]), 1);
+					if ($values[9] ne '') {
+					   readingsSingleUpdate($hash, 'state', sprintf("T: %.1f &deg;C desired: off H: %.1f%%", $values[3],  $values[9]), 1);
+				  } else {
+						 readingsSingleUpdate($hash, 'state', sprintf("T: %.1f &deg;C desired: off", $values[3]), 1);
+					}
 				}
 			} else {
 				readingsSingleUpdate($hash, 'state', "Device is in status '$values[11]'.", 1);
@@ -196,12 +204,12 @@ sub TadoDevice_Parse ($$)
 		} elsif ($values[2] eq 'weather') {
 			readingsBeginUpdate($hash);
 
-			readingsBulkUpdate($hash, "solarIntensity", $values[3] );
-			readingsBulkUpdate($hash, "solarIntensity-timestamp", $values[4] );
-			readingsBulkUpdate($hash, "outsideTemperature", $values[5] );
-			readingsBulkUpdate($hash, "outsideTemperature-timestamp", $values[6] );
-			readingsBulkUpdate($hash, "weatherState", $values[7] );
-			readingsBulkUpdate($hash, "weatherState-timestamp", $values[8] );
+			readingsBulkUpdate($hash, "solarIntensity", $values[3] ) if( defined($values[3]) && !($values[3] eq ''));
+			readingsBulkUpdate($hash, "solarIntensity-timestamp", $values[4] ) if( defined($values[4]) && !($values[4] eq ''));
+			readingsBulkUpdate($hash, "outsideTemperature", $values[5] ) if( defined($values[5]) && !($values[5] eq ''));
+			readingsBulkUpdate($hash, "outsideTemperature-timestamp", $values[6] ) if( defined($values[6]) && !($values[6] eq ''));
+			readingsBulkUpdate($hash, "weatherState", $values[7] ) if( defined($values[7]) && !($values[7] eq ''));
+			readingsBulkUpdate($hash, "weatherState-timestamp", $values[8] ) if( defined($values[8]) && !($values[8] eq ''));
 
 			readingsEndUpdate($hash, 1);
 
@@ -209,30 +217,35 @@ sub TadoDevice_Parse ($$)
 		} elsif ($values[2] eq 'locationdata') {
 			readingsBeginUpdate($hash);
 
-			readingsBulkUpdate($hash, "geoTrackingEnabled", $values[3] );
-			readingsBulkUpdate($hash, "location_stale", $values[4] );
-			readingsBulkUpdate($hash, "location_atHome", $values[5] );
-			readingsBulkUpdate($hash, "bearingFromHome_degrees", $values[6] );
-			readingsBulkUpdate($hash, "bearingFromHome_radians", $values[7] );
-			readingsBulkUpdate($hash, "location_relativeDistanceFromHomeFence", $values[8] );
+			readingsBulkUpdate($hash, "geoTrackingEnabled", $values[3] ) if( defined($values[3]) && !($values[3] eq ''));
+			readingsBulkUpdate($hash, "location_stale", $values[4] ) if( defined($values[4]) && !($values[4] eq ''));
+			readingsBulkUpdate($hash, "location_atHome", $values[5] ) if( defined($values[5]) && !($values[5] eq ''));
+			readingsBulkUpdate($hash, "bearingFromHome_degrees", $values[6] ) if( defined($values[6]) && !($values[6] eq ''));
+			readingsBulkUpdate($hash, "bearingFromHome_radians", $values[7] ) if( defined($values[7]) && !($values[7] eq ''));
+			readingsBulkUpdate($hash, "location_relativeDistanceFromHomeFence", $values[8] ) if( defined($values[8]) && !($values[8] eq ''));
 
-			readingsBulkUpdate($hash, "pushNotification_LowBatteryReminder", $values[9] );
-			readingsBulkUpdate($hash, "pushNotification_awayModeReminder", $values[10] );
-			readingsBulkUpdate($hash, "pushNotification_homeModeReminder", $values[11] );
-			readingsBulkUpdate($hash, "pushNotification_openWindowReminder", $values[12] );
-			readingsBulkUpdate($hash, "pushNotification_energySavingsReportReminder", $values[13] );
+			readingsBulkUpdate($hash, "pushNotification_LowBatteryReminder", $values[9] ) if( defined($values[9]) && !($values[9] eq ''));
+			readingsBulkUpdate($hash, "pushNotification_awayModeReminder", $values[10] ) if( defined($values[10]) && !($values[10] eq ''));
+			readingsBulkUpdate($hash, "pushNotification_homeModeReminder", $values[11] ) if( defined($values[11]) && !($values[11] eq ''));
+			readingsBulkUpdate($hash, "pushNotification_openWindowReminder", $values[12] ) if( defined($values[12]) && !($values[12] eq ''));
+			readingsBulkUpdate($hash, "pushNotification_energySavingsReportReminder", $values[13] ) if( defined($values[13]) && !($values[13] eq ''));
 
-      readingsBulkUpdate($hash, 'state', sprintf("Tracking: %s Home: %s", $values[3], $values[5]), 1);
+      if ($values[3] eq '0') {
+				readingsBulkUpdate($hash, 'state', sprintf("Tracking: OFF"), 1);
+			} else {
+				readingsBulkUpdate($hash, 'state', sprintf("Tracking: ON Home: %s", $values[5]), 1);
+			}
+
 
 			readingsEndUpdate($hash, 1);
 
 		} elsif ($values[2] eq 'airComfort') {
 			readingsBeginUpdate($hash);
 
-			readingsBulkUpdate($hash, "airComfort_temperatureLevel", $values[3] );
-			readingsBulkUpdate($hash, "airComfort_humidityLevel", $values[4] );
-			readingsBulkUpdate($hash, "airComfort_graph_radial", $values[5] );
-			readingsBulkUpdate($hash, "airComfort_graph_angular", $values[6] );
+			readingsBulkUpdate($hash, "airComfort_temperatureLevel", $values[3] ) if( defined($values[3]) && !($values[3] eq ''));
+			readingsBulkUpdate($hash, "airComfort_humidityLevel", $values[4] ) if( defined($values[4]) && !($values[4] eq ''));
+			readingsBulkUpdate($hash, "airComfort_graph_radial", $values[5] ) if( defined($values[5]) && !($values[5] eq ''));
+			readingsBulkUpdate($hash, "airComfort_graph_angular", $values[6] ) if( defined($values[6]) && !($values[6] eq ''));
 
 			readingsEndUpdate($hash, 1);
 
