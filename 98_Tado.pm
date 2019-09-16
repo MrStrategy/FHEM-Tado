@@ -979,8 +979,9 @@ sub Tado_UpdateMobileDeviceCallback($)
 				$message .= $item->{location}->{stale}. ";"
 				. $item->{location}->{atHome}. ";"
 				. $item->{location}->{bearingFromHome}->{degrees}. ";"
-				. $item->{location}->{bearingFromHome}->{radians}. ";"
-				. $item->{location}->{relativeDistanceFromHomeFence}. ";";
+				. $item->{location}->{bearingFromHome}->{radians}. ";";
+				my $distance = $item->{location}->{relativeDistanceFromHomeFence};
+				$message.=	defined $distance ? $distance.";" : ";" ;
 			} else {
 				$message .= ";;;;;"
 			}
@@ -1159,15 +1160,18 @@ sub Tado_UpdateZoneCallback($)
 		#measured-temp
 		. $d->{sensorDataPoints}->{insideTemperature}->{celsius} . ";"
 		#measured-temp-timestamp
-		. $d->{sensorDataPoints}->{insideTemperature}->{timestamp} . ";"
+		. $d->{sensorDataPoints}->{insideTemperature}->{timestamp} . ";";
 		#measured-temp-fahrenheit
-		. $d->{sensorDataPoints}->{insideTemperature}->{fahrenheit} . ";"
-		#measured-temp-precision
-		. $d->{sensorDataPoints}->{insideTemperature}->{precision}->{celsius} . ";"
-		#measured-temp-precision-fahrenheit
-		. $d->{sensorDataPoints}->{insideTemperature}->{precision}->{fahrenheit} . ";";
-		#desired-temp
+		my $measuredFahrenheit = $d->{sensorDataPoints}->{insideTemperature}->{fahrenheit};
+		$message.=	defined $measuredFahrenheit ? $measuredFahrenheit.";" : ";" ;
 
+		#measured-temp-precision
+		$message.= $d->{sensorDataPoints}->{insideTemperature}->{precision}->{celsius} . ";";
+		#measured-temp-precision-fahrenheit
+		my $measuredPrecisionFahrenheit = $d->{sensorDataPoints}->{insideTemperature}->{precision}->{fahrenheit};
+		$message.=	defined $measuredPrecisionFahrenheit ? $measuredPrecisionFahrenheit.";" : ";" ;
+
+		#desired-temp
 		if ($d->{setting}->{power} eq "OFF") {
 			$message .= $d->{setting}->{power}. ";";
 		} else {
@@ -1177,9 +1181,12 @@ sub Tado_UpdateZoneCallback($)
 		#measured-humidity
 		$message .=  $d->{sensorDataPoints}->{humidity}->{percentage} . ";"
 		#measured-humidity-timestamp
-		. $d->{sensorDataPoints}->{humidity}->{timestamp} . ";"
+		. $d->{sensorDataPoints}->{humidity}->{timestamp} . ";";
 		#link
-		. $d->{link}->{state} . ";";
+		my $link = $d->{link}->{state};
+		$message.=	defined $link ? $link.";" : ";" ;
+
+
 
 		#open-window
 		if (not defined $d->{openWindow}) {
@@ -1188,18 +1195,23 @@ sub Tado_UpdateZoneCallback($)
 			$message .= $d->{openWindow} . ";"
 		}
 		#heating-percentage
-		$message .= $d->{activityDataPoints}->{heatingPower}->{percentage} . ";"
+		$message .= $d->{activityDataPoints}->{heatingPower}->{percentage} . ";";
 		#heating-percentage-timestamp
-		. $d->{activityDataPoints}->{heatingPower}->{timestamp} . ";";
+		my $heatingTimestamp = $d->{activityDataPoints}->{heatingPower}->{timestamp};
+		$message.=	defined $heatingTimestamp ? $heatingTimestamp.";" : ";" ;
+
 
 
 		if (defined $d->{nextScheduleChange}){
 			#nextScheduleChange-temperature
-			$message .=  $d->{nextScheduleChange}->{setting}->{temperature}->{celsius} . ";"
+			$message .=  $d->{nextScheduleChange}->{setting}->{temperature}->{celsius} . ";";
 			#nextScheduleChange-power
-			. $d->{nextScheduleChange}->{setting}->{power} . ";"
+			my $nextScheduleChangePower = $d->{nextScheduleChange}->{setting}->{power};
+				$message.=	defined $nextScheduleChangePower ? $nextScheduleChangePower.";" : ";" ;
 			#nextScheduleChange-start
-			. $d->{nextScheduleChange}->{start} . ";";
+			my $nextScheduleChangeState = $d->{nextScheduleChange}->{start};
+				$message.=	defined $nextScheduleChangeState ? $nextScheduleChangeState.";" : ";" ;
+
 		} else {
 			$message .=  ";;;";
 		}

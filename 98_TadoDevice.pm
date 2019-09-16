@@ -233,7 +233,7 @@ sub TadoDevice_Parse ($$)
       if ($values[3] eq '0') {
 				readingsBulkUpdate($hash, 'state', sprintf("Tracking: OFF"), 1);
 			} else {
-				readingsBulkUpdate($hash, 'state', sprintf("Tracking: ON Home: %s", $values[5]), 1);
+					readingsBulkUpdate($hash, 'state', "Tracking: ON Home: ". defined $values[5] ? $values[5] : 'undef', 1);
 			}
 
 
