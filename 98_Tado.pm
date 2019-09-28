@@ -1156,17 +1156,20 @@ sub Tado_UpdateZoneCallback($)
 
 		my $overlay =  defined $d->{overlay} ? 1 : 0;
 
-		my $message = "Tado;$param->{zoneID};temp;"
+		my $message = "Tado;$param->{zoneID};temp;";
 		#measured-temp
-		. $d->{sensorDataPoints}->{insideTemperature}->{celsius} . ";"
+		my $insideTempCelsius = $d->{sensorDataPoints}->{insideTemperature}->{celsius};
+		$message.=	defined $insideTempCelsius ? $insideTempCelsius.";" : ";" ;
 		#measured-temp-timestamp
-		. $d->{sensorDataPoints}->{insideTemperature}->{timestamp} . ";";
+		my $insideTempTimestamp = $d->{sensorDataPoints}->{insideTemperature}->{timestamp};
+		$message.=	defined $insideTempTimestamp ? $insideTempTimestamp.";" : ";" ;
 		#measured-temp-fahrenheit
 		my $measuredFahrenheit = $d->{sensorDataPoints}->{insideTemperature}->{fahrenheit};
 		$message.=	defined $measuredFahrenheit ? $measuredFahrenheit.";" : ";" ;
 
 		#measured-temp-precision
-		$message.= $d->{sensorDataPoints}->{insideTemperature}->{precision}->{celsius} . ";";
+		my $measuredPrecisionCelsius = $d->{sensorDataPoints}->{insideTemperature}->{precision}->{celsius};
+		$message.=	defined $measuredPrecisionCelsius ? $measuredPrecisionCelsius.";" : ";" ;
 		#measured-temp-precision-fahrenheit
 		my $measuredPrecisionFahrenheit = $d->{sensorDataPoints}->{insideTemperature}->{precision}->{fahrenheit};
 		$message.=	defined $measuredPrecisionFahrenheit ? $measuredPrecisionFahrenheit.";" : ";" ;
@@ -1195,7 +1198,9 @@ sub Tado_UpdateZoneCallback($)
 			$message .= $d->{openWindow} . ";"
 		}
 		#heating-percentage
-		$message .= $d->{activityDataPoints}->{heatingPower}->{percentage} . ";";
+		my $heatingPowerTemperature = $d->{activityDataPoints}->{heatingPower}->{percentage};
+		$message.=	defined $heatingPowerTemperature ? $heatingPowerTemperature.";" : ";" ;
+
 		#heating-percentage-timestamp
 		my $heatingTimestamp = $d->{activityDataPoints}->{heatingPower}->{timestamp};
 		$message.=	defined $heatingTimestamp ? $heatingTimestamp.";" : ";" ;
@@ -1204,7 +1209,8 @@ sub Tado_UpdateZoneCallback($)
 
 		if (defined $d->{nextScheduleChange}){
 			#nextScheduleChange-temperature
-			$message .=  $d->{nextScheduleChange}->{setting}->{temperature}->{celsius} . ";";
+			my $nextScheduleChangeTemperature = $d->{nextScheduleChange}->{setting}->{temperature}->{celsius};
+			$message.=	defined $nextScheduleChangeTemperature ? $nextScheduleChangeTemperature.";" : ";" ;
 			#nextScheduleChange-power
 			my $nextScheduleChangePower = $d->{nextScheduleChange}->{setting}->{power};
 				$message.=	defined $nextScheduleChangePower ? $nextScheduleChangePower.";" : ";" ;
