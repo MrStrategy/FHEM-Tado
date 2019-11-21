@@ -457,8 +457,13 @@ sub Tado_GetZones($)
 			$deviceHash->{originalName} = $item->{name};
 			$deviceHash->{TadoType} = $item->{Type};
 
-			readingsSingleUpdate($deviceHash, "date_created"  , $item->{dateCreated} , 1);
-			readingsSingleUpdate($deviceHash, "supports_dazzle"  , $item->{supportsDazzle}, 1 );
+ 		 if	(length $item->{dateCreated}) {
+				readingsSingleUpdate($deviceHash, "date_created"  , $item->{dateCreated} , 1);
+			}
+
+ 		 if	(length $item->{supportsDazzle}) {
+			 	readingsSingleUpdate($deviceHash, "supports_dazzle"  , $item->{supportsDazzle}, 1 );
+			}
 
 		}
 
