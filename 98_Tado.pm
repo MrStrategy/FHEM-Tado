@@ -981,12 +981,19 @@ sub Tado_UpdateMobileDeviceCallback($)
 
 			if ($item->{settings}->{geoTrackingEnabled})
 			{
-				$message .= $item->{location}->{stale}. ";"
-				. $item->{location}->{atHome}. ";"
-				. $item->{location}->{bearingFromHome}->{degrees}. ";"
-				. $item->{location}->{bearingFromHome}->{radians}. ";";
-				my $distance = $item->{location}->{relativeDistanceFromHomeFence};
-				$message.=	defined $distance ? $distance.";" : ";" ;
+
+				my $locationStale = $item->{location}->{stale};
+				$message.=      defined $locationStale ? $locationStale.";" : ";" ;
+				my $locationAtHome = $item->{location}->{atHome};
+				$message.=      defined $locationAtHome ? $locationAtHome.";" : ";" ;
+				my $locationDegrees = $item->{location}->{bearingFromHome}->{degrees};
+				$message.=      defined $locationDegrees ? $locationDegrees.";" : ";" ;
+				my $locationRadians = $item->{location}->{bearingFromHome}->{radians};
+				$message.=      defined $locationRadians ? $locationRadians.";" : ";" ;
+				my $locationDistance = $item->{location}->{relativeDistanceFromHomeFence};
+				$message.=      defined $locationDistance ? $locationDistance.";" : ";" ;
+
+
 			} else {
 				$message .= ";;;;;"
 			}
@@ -1187,9 +1194,13 @@ sub Tado_UpdateZoneCallback($)
 		}
 
 		#measured-humidity
-		$message .=  $d->{sensorDataPoints}->{humidity}->{percentage} . ";"
+		my $measuredHumidity = $d->{sensorDataPoints}->{humidity}->{percentage};
+		$message.=      defined $measuredHumidity ? $measuredHumidity.";" : ";" ;
 		#measured-humidity-timestamp
-		. $d->{sensorDataPoints}->{humidity}->{timestamp} . ";";
+		my $measuredHumidityTimestamp = $d->{sensorDataPoints}->{humidity}->{timestamp};
+		$message.=      defined $measuredHumidityTimestamp ? $measuredHumidityTimestamp.";" : ";" ;
+
+
 		#link
 		my $link = $d->{link}->{state};
 		$message.=	defined $link ? $link.";" : ";" ;
