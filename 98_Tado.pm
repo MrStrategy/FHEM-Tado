@@ -1238,6 +1238,13 @@ sub Tado_UpdateZoneCallback($)
 			$message .=  ";;;";
 		}
 
+		#tado-mode
+		if (not defined $d->{tadoMode}) {
+			$message .= "null;"
+		} else {
+			$message .= $d->{tadoMode} . ";"
+		}
+
 		#overlay-active
 		$message .= $overlay;
 

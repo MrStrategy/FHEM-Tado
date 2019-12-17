@@ -157,16 +157,18 @@ sub TadoDevice_Parse ($$)
 
 			readingsBulkUpdate($hash, "nextScheduleChange-start", $values[17]) if( defined($values[17]) && !($values[17] eq ''));
 
-			readingsBulkUpdate($hash, "overlay-active", $values[18]) if( defined($values[18]) && !($values[18] eq ''));
+			readingsBulkUpdate($hash, "tado-mode", $values[18]) if( defined($values[18]) && !($values[18] eq ''));
 
-			if ($values[18] eq "1"){
-				readingsBulkUpdate($hash, "overlay-mode", $values[19]) ;
-				readingsBulkUpdate($hash, "overlay-power", $values[20]);
-				readingsBulkUpdate($hash, "overlay-desired-temperature", $values[21]);
-				readingsBulkUpdate($hash, "overlay-termination-mode", $values[22]);
-				readingsBulkUpdate($hash, "overlay-termination-durationInSeconds", $values[23]);
-				readingsBulkUpdate($hash, "overlay-termination-expiry", $values[24]);
-				readingsBulkUpdate($hash, "overlay-termination-remainingTimeInSeconds", $values[25]);
+			readingsBulkUpdate($hash, "overlay-active", $values[19]) if( defined($values[19]) && !($values[19] eq ''));
+
+			if ($values[19] eq "1"){
+				readingsBulkUpdate($hash, "overlay-mode", $values[20]) ;
+				readingsBulkUpdate($hash, "overlay-power", $values[21]);
+				readingsBulkUpdate($hash, "overlay-desired-temperature", $values[22]);
+				readingsBulkUpdate($hash, "overlay-termination-mode", $values[23]);
+				readingsBulkUpdate($hash, "overlay-termination-durationInSeconds", $values[24]);
+				readingsBulkUpdate($hash, "overlay-termination-expiry", $values[25]);
+				readingsBulkUpdate($hash, "overlay-termination-remainingTimeInSeconds", $values[26]);
 			} else {
 				Log3 $name, 5, "TadoDevice_Parse: No overlay data available. Deleting overlay readings.";
 				readingsDelete($hash, "overlay-mode" );
