@@ -188,17 +188,21 @@ sub TadoDevice_Parse ($$)
 					if ($values[9] ne '') {
 						readingsSingleUpdate($hash, 'state', sprintf("T: %.1f &deg;C desired: %.1f &deg;C H: %.1f%%", $values[3], $values[8], $values[9]), 1);
 					} else {
-					  readingsSingleUpdate($hash, 'state', sprintf("T: %.1f &deg;C desired: %.1f &deg;C", $values[3], $values[8]), 1);
+					    if ($values[3] ne '') {
+ 	                                        readingsSingleUpdate($hash, 'state', sprintf("T: %.1f &deg;C desired: %.1f &deg;C", $values[3], $values[8]), 1);
+					    } else {
+	                                        readingsSingleUpdate($hash, 'state', sprintf("desired: %.1f &deg;C", $values[8]), 1);
+					    }
 					}
 				} else {
 					if ($values[9] ne '') {
 					   readingsSingleUpdate($hash, 'state', sprintf("T: %.1f &deg;C desired: off H: %.1f%%", $values[3],  $values[9]), 1);
-				  } else {
-						if ($values[3] ne '') {
+				  	} else {
+					   if ($values[3] ne '') {
 						 readingsSingleUpdate($hash, 'state', sprintf("T: %.1f &deg;C desired: off", $values[3]), 1);
-					 } else {
-						 readingsSingleUpdate($hash, 'state', sprintf("Desired: off", $values[3]), 1);
-					 }
+					   } else {
+                                                 readingsSingleUpdate($hash, 'state', "desired: off", 1);
+					   }
 					}
 				}
 			} else {

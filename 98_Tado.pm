@@ -1010,7 +1010,7 @@ sub Tado_UpdateMobileDeviceCallback($)
 				$message .=";;;;"
 			}
 
-			Log3 $name, 2, "$name: trying to dispatch message: $message";
+			Log3 $name, 4, "$name: trying to dispatch message: $message";
 			my $found = Dispatch($hash, $message);
 			$found = "not dispatched" if (not defined $found);
 			Log3 $name, 4, "$name: tried to dispatch message. Result: $found";
