@@ -1267,13 +1267,26 @@ sub Tado_UpdateZoneCallback($)
 			#overlay-termination-durationInSeconds
 
 			if (not $d->{overlay}->{termination}->{type} eq 'MANUAL'){
-				$message .= $d->{overlay}->{termination}->{durationInSeconds} . ";"
+
+				#overlay-overlay-durationInSeconds
+				my $overlayDurationInSeconds = $d->{overlay}->{termination}->{durationInSeconds};
+				$message .= defined $overlayDurationInSeconds ? $overlayDurationInSeconds.";" : ";";
+
 				#overlay-overlay-termination-expiry
-				. $d->{overlay}->{termination}->{expiry} . ";"
+				my $overlayExpiry = $d->{overlay}->{termination}->{expiry};
+				$message .= defined $overlayExpiry ? $overlayExpiry.";" : ";";
+
 				#overlay-overlay-termination-remainingTimeInSeconds
-				. $d->{overlay}->{termination}->{remainingTimeInSeconds};
+				my $overlayRemainingTimeInSeconds = $d->{overlay}->{termination}->{remainingTimeInSeconds};
+				$message .= defined $overlayRemainingTimeInSeconds ? $overlayRemainingTimeInSeconds.";" : ";";
+
+			} else {
+				$message .=  ";;;";
 			}
 
+		# No overlay active - all values null
+		} else {
+				$message .= ";;;;;;;"
 		}
 
 		Log3 $name, 4, "$name: trying to dispatch message: $message";
