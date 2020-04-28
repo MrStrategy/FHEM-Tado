@@ -240,6 +240,12 @@ sub TadoDevice_Parse ($$)
 			readingsBulkUpdate($hash, "pushNotification_openWindowReminder", $values[12] ) if( defined($values[12]) && !($values[12] eq ''));
 			readingsBulkUpdate($hash, "pushNotification_energySavingsReportReminder", $values[13] ) if( defined($values[13]) && !($values[13] eq ''));
 
+			readingsBulkUpdate($hash, "device_platform", $values[14] ) if( defined($values[14]) && !($values[14] eq ''));
+			readingsBulkUpdate($hash, "device_os_version", $values[15] ) if( defined($values[15]) && !($values[15] eq ''));
+			readingsBulkUpdate($hash, "device_model", $values[16] ) if( defined($values[16]) && !($values[16] eq ''));
+			readingsBulkUpdate($hash, "device_locale", $values[17] ) if( defined($values[17]) && !($values[17] eq ''));
+
+
       if ($values[3] eq '0') {
 				readingsBulkUpdate($hash, 'state', sprintf("Tracking: OFF"), 1);
 			} else {
@@ -259,6 +265,16 @@ sub TadoDevice_Parse ($$)
 
 			readingsEndUpdate($hash, 1);
 
+		} elsif ($values[2] eq 'devicedata') {
+			readingsBeginUpdate($hash);
+
+			readingsBulkUpdate($hash, "currentFwVersion", $values[3] ) if( defined($values[3]) && !($values[3] eq ''));
+			readingsBulkUpdate($hash, "inPairingMode", $values[4] ) if( defined($values[4]) && !($values[4] eq ''));
+			readingsBulkUpdate($hash, "batteryState", $values[5] ) if( defined($values[5]) && !($values[5] eq ''));
+			readingsBulkUpdate($hash, "connectionState", $values[6] ) if( defined($values[6]) && !($values[6] eq ''));
+			readingsBulkUpdate($hash, "connectionStateLastUpdate", $values[7] ) if( defined($values[7]) && !($values[7] eq ''));
+
+			readingsEndUpdate($hash, 1);
 		}
 
 		# Rückgabe des Gerätenamens, für welches die Nachricht bestimmt ist.

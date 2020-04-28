@@ -24,8 +24,15 @@ weather => " "
 my %Tado_sets = (
 start	=> " ",
 stop => " ",
-interval => " "
+interval => " ",
+presence => " "
 );
+
+my %Tado_HomeAwayStatus = (
+HOME	=> " ",
+AWAY => " ",
+);
+
 
 my  %url = (
 getZoneTemperature     => 'https://my.tado.com/api/v2/homes/#HomeID#/zones/#ZoneID#/state?username=#Username#&password=#Password#',
@@ -38,7 +45,9 @@ getHomeDetails         =>  'https://my.tado.com/api/v2/homes/#HomeID#?username=#
 getWeather             =>  'https://my.tado.com/api/v2/homes/#HomeID#/weather?username=#Username#&password=#Password#',
 getDevices             =>  'https://my.tado.com/api/v2/homes/#HomeID#/devices?username=#Username#&password=#Password#',
 identifyDevice    		 =>  'https://my.tado.com/api/v2/devices/#DeviceId#/identify?username=#Username#&password=#Password#',
-getAirComfort          =>  'https://my.tado.com/api/v2/homes/#HomeID#/airComfort?username=#Username#&password=#Password#'
+getAirComfort          =>  'https://my.tado.com/api/v2/homes/#HomeID#/airComfort?username=#Username#&password=#Password#',
+setPresenceStatus      =>  'https://my.tado.com/api/v2/homes/#HomeID#/presenceLock?username=#Username#&password=#Password#',
+getPresenceStatus      =>  'https://my.tado.com/api/v2/homes/#HomeID#/state?username=#Username#&password=#Password#',
 );
 
 
@@ -235,7 +244,11 @@ sub Tado_Get($@)
 		Tado_RequestWeatherUpdate($hash);
 		Tado_RequestMobileDeviceUpdate($hash);
 		Tado_RequestAirComfortUpdate($hash);
+		Tado_RequestDeviceUpdate($hash);
+	  Tado_RequestPresenceUpdate($hash);
+
 		delete $hash->{LOCAL};
+		return undef;
 
   }  elsif($opt eq "airComfortUpdate")  {
 
@@ -267,7 +280,7 @@ sub Tado_Set($@)
 
 	if(!defined($Tado_sets{$opt})) {
 		my @cList = keys %Tado_sets;
-		return "Unknown argument $opt, choose one of " . join(" ", @cList);
+		return "Unknown argument $opt, choose one of start stop interval presence:HOME,AWAY";
 	}
 
 	if ($opt eq "start")	{
@@ -301,8 +314,26 @@ sub Tado_Set($@)
 		Log3 $name, 1, "Tado_Set $name: Set interval to" . $interval;
 
 		$hash->{INTERVAL} = $interval;
-	}
+	} elsif ($opt eq "presence"){
+
+
+      my $status = shift @param;
+
+			if(!$Tado_HomeAwayStatus{$status}) {
+				my @pList = keys %Tado_HomeAwayStatus;
+				return "Unknown argument $status, choose one of presence:HOME,AWAY";
+				#return "Unknown argument $status, choose one of homeAwayStatus:". join(",", @pList);
+			}
+
+			Tado_UpdatePresenceStatus($hash,$status);
+
+
+		}
+			readingsSingleUpdate($hash,'state','Initialized',0);
+			return undef;
+
 }
+
 
 
 sub Tado_Attr(@)
@@ -559,17 +590,13 @@ sub Tado_GetDevices($)
 						$deviceHash->{deviceType} = $item->{deviceType};
 						$deviceHash->{serialNo} = $item->{serialNo};
 						$deviceHash->{shortSerialNo} = $item->{shortSerialNo};
-						$deviceHash->{currentFwVersion} = $item->{currentFwVersion};
-						$deviceHash->{inPairingMode} = $item->{inPairingMode};
-						$deviceHash->{capabilities} = join(" ", $item->{characteristics}->{capabilities});
+						$deviceHash->{capabilities} = join(' ', $item->{characteristics}->{capabilities});
 					} else {
 						CommandAttr(undef,"$deviceName subType thermostat");
 						$deviceHash->{deviceType} = $item->{deviceType};
 						$deviceHash->{serialNo} = $item->{serialNo};
 						$deviceHash->{shortSerialNo} = $item->{shortSerialNo};
-						$deviceHash->{currentFwVersion} = $item->{currentFwVersion};
-						$deviceHash->{batteryState} = $item->{inPairingMode};
-						$deviceHash->{capabilities} = join(" ", $item->{characteristics}->{capabilities});
+						$deviceHash->{capabilities} = join(' ', $item->{characteristics}->{capabilities});
 					}
 				}
 			}
@@ -577,6 +604,9 @@ sub Tado_GetDevices($)
 		readingsEndUpdate($hash, 1);
 		return undef;
 	}
+
+	Tado_RequestDeviceUpdate($hash);
+
 }
 
 sub Tado_GetMobileDevices($)
@@ -774,6 +804,8 @@ sub Tado_GetEarlyStart($)
 	return undef;
 }
 
+
+
 sub Tado_UpdateEarlyStartCallback($)
 {
 	my ($param, $err, $data) = @_;
@@ -938,6 +970,130 @@ sub Tado_UpdateWeatherCallback($)
 
 }
 
+
+sub Tado_UpdatePresenceCallback($)
+{
+	my ($param, $err, $data) = @_;
+	my $hash = $param->{hash};
+	my $name = $hash->{NAME};
+
+	if($err ne "")                                                                                                      # wenn ein Fehler bei der HTTP Abfrage aufgetreten ist
+	{
+		Log3 $name, 3, "error while requesting ".$param->{url}." - $err";                                               # Eintrag fürs Log
+		readingsSingleUpdate($hash, "state", "ERROR", 1);
+		return undef;
+	}
+
+	Log3 $name, 3, "Received non-blocking data from TADO for devices.";
+
+	Log3 $name, 4, "FHEM -> Tado: " . $param->{url};
+	Log3 $name, 4, "FHEM -> Tado: " . $param->{message} if (defined $param->{message});
+	Log3 $name, 4, "Tado -> FHEM: " . $data;
+	Log3 $name, 5, '$err: ' . $err;
+	Log3 $name, 5, "method: " . $param->{method};
+	Log3 $name, 2, "Something gone wrong" if( $data =~ "/tadoMode/" );
+
+	if (!defined($data) or $param->{method} eq 'DELETE') {
+		return undef;
+	}
+
+	eval {
+		my $d  = decode_json($data) if( !$err );
+		Log3 $name, 4, 'Decoded: ' . Dumper($d);
+
+		if (defined $d && ref($d) eq "HASH" && defined $d->{errors}){
+			log 1, Dumper $d;
+			readingsSingleUpdate($hash,'state',"Error: $d->{errors}[0]->{code} / $d->{errors}[0]->{title}",0);
+			return undef;
+		}
+
+		readingsBeginUpdate($hash);
+		readingsBulkUpdate($hash, "Presence", $d->{presence} );
+		readingsEndUpdate($hash, 1);
+
+		return undef;
+	} or do  {
+		Log3 $name, 5, 'Failure decoding: ' . $@;
+		return undef;
+	}
+
+}
+
+
+sub Tado_UpdateDeviceCallback($)
+{
+	my ($param, $err, $data) = @_;
+	my $hash = $param->{hash};
+	my $name = $hash->{NAME};
+
+	if($err ne "")                                                                                                      # wenn ein Fehler bei der HTTP Abfrage aufgetreten ist
+	{
+		Log3 $name, 3, "error while requesting ".$param->{url}." - $err";                                               # Eintrag fürs Log
+		readingsSingleUpdate($hash, "state", "ERROR", 1);
+		return undef;
+	}
+
+	Log3 $name, 3, "Received non-blocking data from TADO for devices.";
+
+	Log3 $name, 4, "FHEM -> Tado: " . $param->{url};
+	Log3 $name, 4, "FHEM -> Tado: " . $param->{message} if (defined $param->{message});
+	Log3 $name, 4, "Tado -> FHEM: " . $data;
+	Log3 $name, 5, '$err: ' . $err;
+	Log3 $name, 5, "method: " . $param->{method};
+	Log3 $name, 2, "Something gone wrong" if( $data =~ "/tadoMode/" );
+
+	if (!defined($data) or $param->{method} eq 'DELETE') {
+		return undef;
+	}
+
+	eval {
+		my $d  = decode_json($data) if( !$err );
+		Log3 $name, 4, 'Decoded: ' . Dumper($d);
+
+		if (defined $d && ref($d) eq "HASH" && defined $d->{errors}){
+			log 1, Dumper $d;
+			readingsSingleUpdate($hash,'state',"Error: $d->{errors}[0]->{code} / $d->{errors}[0]->{title}",0);
+			return undef;
+		}
+
+
+
+		for my $item( @{$d} ){
+
+      my $deviceId = "$item->{serialNo}";
+			my $message = "Tado;$deviceId;devicedata;";
+
+				my $currentFwVersion = $item->{currentFwVersion};
+				$message.=      defined $currentFwVersion ? $currentFwVersion.";" : ";" ;
+				my $inPairingMode = $item->{inPairingMode};
+				$message.=      defined $inPairingMode ? $inPairingMode.";" : ";" ;
+				my $batteryState = $item->{batteryState};
+				$message.=      defined $batteryState ? $batteryState.";" : ";" ;
+				my $connectionStateValue = $item->{connectionState}->{value};
+				$message.=      defined $connectionStateValue ? $connectionStateValue.";" : ";" ;
+				my $connectionStateTimestamp = $item->{connectionState}->{timestamp};
+				$message.=      defined $connectionStateTimestamp ? $connectionStateTimestamp.";" : ";" ;
+
+			Log3 $name, 4, "$name: trying to dispatch message: $message";
+			my $found = Dispatch($hash, $message);
+			$found = "not dispatched" if (not defined $found);
+			Log3 $name, 4, "$name: tried to dispatch message. Result: $found";
+		}
+
+		readingsBeginUpdate($hash);
+		readingsBulkUpdate($hash, "LastUpdate_Devices", localtime );
+		readingsEndUpdate($hash, 1);
+
+		return undef;
+	} or do  {
+		Log3 $name, 5, 'Failure decoding: ' . $@;
+		return undef;
+	}
+
+}
+
+
+
 sub Tado_UpdateMobileDeviceCallback($)
 {
 	my ($param, $err, $data) = @_;
@@ -1005,10 +1161,26 @@ sub Tado_UpdateMobileDeviceCallback($)
 				. $item->{settings}->{pushNotifications}->{awayModeReminder}. ";"
 				. $item->{settings}->{pushNotifications}->{homeModeReminder}. ";"
 				. $item->{settings}->{pushNotifications}->{openWindowReminder}. ";"
-				. $item->{settings}->{pushNotifications}->{energySavingsReportReminder};
+				. $item->{settings}->{pushNotifications}->{energySavingsReportReminder}.";";
+			} else {
+				$message .=";;;;;"
+			}
+
+
+			if (defined $item->{deviceMetadata})
+			{
+				my $devicePlatform = $item->{deviceMetadata}->{platform};
+				$message.=      defined $devicePlatform ? $devicePlatform.";" : ";" ;
+				my $deviceOs = $item->{deviceMetadata}->{osVersion};
+				$message.=      defined $deviceOs ? $deviceOs.";" : ";" ;
+				my $deviceModel = $item->{deviceMetadata}->{model};
+				$message.=      defined $deviceModel ? $deviceModel.";" : ";" ;
+				my $deviceLocale = $item->{deviceMetadata}->{locale};
+				$message.=      defined $deviceLocale ? $deviceLocale.";" : ";" ;
 			} else {
 				$message .=";;;;"
 			}
+
 
 			Log3 $name, 4, "$name: trying to dispatch message: $message";
 			my $found = Dispatch($hash, $message);
@@ -1026,6 +1198,8 @@ sub Tado_UpdateMobileDeviceCallback($)
 	}
 
 }
+
+
 
 sub Tado_RequestWeatherUpdate($)
 {
@@ -1083,6 +1257,107 @@ sub Tado_RequestWeatherUpdate($)
 	HttpUtils_NonblockingGet($request);
 
 }
+
+
+
+sub Tado_RequestDeviceUpdate($)
+{
+	my ($hash) = @_;
+	my $name = $hash->{NAME};
+
+	if (not defined $hash){
+		Log3 'Tado', 1, "Error on Tado_RequestDeviceUpdate. Missing hash variable";
+		return undef;
+	}
+
+	my $isEnabled = AttrVal($name, 'generateDevices', 'yes');
+	if ($isEnabled eq 'no') {
+		my $msg = "Attribute 'generateDevices' is set to no. No update will be executed.";
+		Log3 'Tado', 3, $msg;
+		return undef;
+	}
+
+	my $homeID = ReadingsVal ($name,"HomeID",undef);
+	if (not defined $homeID) {
+		my $msg = "Error on Tado_RequestDeviceUpdate. Missing HomeID. Please define Home first.";
+		Log3 'Tado', 1, $msg;
+		return $msg;
+	}
+
+
+
+	Log3 $name, 4, "Tado_RequestDeviceUpdate Called. Name: $name";
+	my $readTemplate = $url{getDevices};
+	my $passwd = urlEncode(tado_decrypt(InternalVal($name,'Password', undef)));
+	my $user = urlEncode(InternalVal($name,'Username', undef));
+
+	$readTemplate =~ s/#Username#/$user/g;
+	$readTemplate =~ s/#Password#/$passwd/g;
+	$readTemplate =~ s/#HomeID#/$homeID/g;
+
+	my $request = {
+		url           => $readTemplate,
+		header        => "Content-Type:application/json;charset=UTF-8",
+		method        => 'GET',
+		timeout       =>  2,
+		hideurl       =>  1,
+		callback      => \&Tado_UpdateDeviceCallback,
+		hash          => $hash
+	};
+
+	Log3 $name, 5, 'NonBlocking Request: ' . Dumper($request);
+
+	HttpUtils_NonblockingGet($request);
+
+}
+
+
+sub Tado_RequestPresenceUpdate($)
+{
+	my ($hash) = @_;
+	my $name = $hash->{NAME};
+
+	if (not defined $hash){
+		Log3 'Tado', 1, "Error on Tado_RequestPresenceUpdate. Missing hash variable";
+		return undef;
+	}
+
+
+	my $homeID = ReadingsVal ($name,"HomeID",undef);
+	if (not defined $homeID) {
+		my $msg = "Error on Tado_RequestPresenceUpdate. Missing HomeID. Please define Home first.";
+		Log3 'Tado', 1, $msg;
+		return $msg;
+	}
+
+
+
+	Log3 $name, 4, "Tado_RequestPresenceUpdate Called. Name: $name";
+	my $readTemplate = $url{getPresenceStatus};
+	my $passwd = urlEncode(tado_decrypt(InternalVal($name,'Password', undef)));
+	my $user = urlEncode(InternalVal($name,'Username', undef));
+
+	$readTemplate =~ s/#Username#/$user/g;
+	$readTemplate =~ s/#Password#/$passwd/g;
+	$readTemplate =~ s/#HomeID#/$homeID/g;
+
+	my $request = {
+		url           => $readTemplate,
+		header        => "Content-Type:application/json;charset=UTF-8",
+		method        => 'GET',
+		timeout       =>  2,
+		hideurl       =>  1,
+		callback      => \&Tado_UpdatePresenceCallback,
+		hash          => $hash
+	};
+
+	Log3 $name, 5, 'NonBlocking Request: ' . Dumper($request);
+
+	HttpUtils_NonblockingGet($request);
+
+}
+
+
 
 sub Tado_RequestMobileDeviceUpdate($)
 {
@@ -1391,6 +1666,9 @@ sub Tado_UpdateDueToTimer($)
 	Tado_RequestMobileDeviceUpdate($hash);
 	Tado_RequestWeatherUpdate($hash);
 
+	Tado_RequestDeviceUpdate($hash);
+	Tado_RequestPresenceUpdate($hash);
+
 }
 
 
@@ -1510,6 +1788,35 @@ sub Tado_RequestAirComfortUpdate($)
 }
 
 
+sub Tado_UpdatePresenceStatus($$)
+{
+
+	 my ($hash, $homeAwayStatus) = @_;
+	 my $name = $hash->{NAME};
+
+		my $readTemplate = $url{"setPresenceStatus"};
+
+		my $passwd = urlEncode(tado_decrypt(InternalVal($name,'Password', undef)));
+		my $user = urlEncode(InternalVal($name,'Username', undef));
+		my $homeID = ReadingsVal ($name,"HomeID",undef);
+
+		$readTemplate =~ s/#HomeID#/$homeID/g;
+		$readTemplate =~ s/#Username#/$user/g;
+		$readTemplate =~ s/#Password#/$passwd/g;
+
+
+		my %message ;
+		$message{'homePresence'} = $homeAwayStatus;
+
+		my $d = Tado_httpSimpleOperation( $hash , $readTemplate, 'PUT',  encode_json \%message  );
+
+		Tado_RequestPresenceUpdate($hash);
+		return undef;
+}
+
+
+
+
 sub Tado_Write ($$)
 {
 	my ($hash,$code,$zoneID,$param1,$param2)= @_;
@@ -1595,6 +1902,9 @@ sub Tado_Write ($$)
 		Tado_RequestWeatherUpdate($hash);
 		Tado_RequestMobileDeviceUpdate($hash);
 		Tado_RequestAirComfortUpdate($hash);
+
+		Tado_RequestDeviceUpdate($hash);
+
 	}
 
 	if ($code eq 'Hi')
