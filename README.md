@@ -119,62 +119,48 @@ The 98_TadoDevice.pm contains the code to define the different TadoDevices. The 
                 <br/><b>If this attribute is set to <i>no</i> or if the attribute is not existing no Devices will be generated..</b>
             </li>
         </ul>
-
-    </ul>
-
+ </ul>
     <br>
     <a name="Tadoreadings"></a>
     <b>Generated Readings/Events:</b>
-
     <ul>
         <ul>
             <li><b>DeviceCount</b>
                 <br> Indicates how many devices (hardware devices provided by Tado) are registered in the linked Tado Account.
                 <br/> This reading will only be available / updated if the attribute <i>generateDevices</i> is set to <i>yes</i>.
             </li>
-
             <li><b>LastUpdate_Devices</b>
                 <br> Indicates when the last successful request to update the hardware devices (TadoDevices) was send to the Tado API. his reading will only be available / updated if the attribute <i>generateDevices</i> is set to <i>yes</i>.
             </li>
-
             <li><b>HomeID</b>
                 <br> Unique identifier for your Tado account instance. All devices are linked to your homeID and the homeID required for almost all Tado API requests.
             </li>
-
             <li><b>HomeName</b>
                 <br> Name of your Tado home as you have configured it in your Tado account.
             </li>
-
             <li><b>Presence</b>
                 <br> The current presence status of your home. The status can be HOME or AWAY and is valid for the whole home and all devices and zones linked to this home. The Presence reading can be influences by the <i>set presence</i> command or based on geofencing using mobile devices.
             </li>
-
             <li><b>airComfort_freshness</b>
                 <br> The overall fresh air indicator for your home. Represents a summary of the single indicators per zone / room.
             </li>
-
             <li><b>airComfort_lastWindowOpen</b>
                 <br> Inidcates the last time an open window was detected by Tado to refresh the air within the home.
             </li>
-
             <li><b>LastUpdate_AirComfort</b>
                 <br> Indicates when the last successful request to update the air comfort was send to the Tado API.
             </li>
-
             <li><b>LastUpdate_MobileDevices</b>
                 <br> Indicates when the last successful request to update the mobile devices was send to the Tado API. his reading will only be available / updated if the attribute <i>generateMobileDevices</i> is set to <i>yes</i>.
             </li>
-
             <li><b>LastUpdate_Weather</b>
                 <br> Indicates when the last successful request to update the weather was send to the Tado API. his reading will only be available / updated if the attribute <i>generateWeather</i> is set to <i>yes</i>.
             </li>
-
             <li><b>LastUpdate_Zones</b>
                 <br> Indicates when the last successful request to update the zone / room data was send to the Tado API.
             </li>
         </ul>
     </ul>
-
 </ul>
 
 <a name="TadoDevice"></a>
@@ -322,15 +308,12 @@ The 98_TadoDevice.pm contains the code to define the different TadoDevices. The 
                 <br> Indicates when the value in <i>heating-percentage</i> was actually measured.
                 <br> If the connection between the Tado bridge and the Tado webserver is broken values may get aged. This can be identified using this reading.
             </li>
-
             <li><b>open-window</b>
                 <br> If tado recognizes an open window within the current zone / room this reading contains the timestamp since when the window is open. If no open window is detected the reading contains the value <i>null</i>
             </li>
-
             <li><b>supportsDazzle</b>
                 <br> Tado dazzle mode shows status changes made via web or mobile app on the Tado device. E.g. if you change the temperature in a zone / room via app, the Tado device displays the new temperature for some seconds so you can check you chnaged the correct device. This reading indicates if the current zone / room and the devices within support dazzle mode.
             </li>
-
         </ul>
         <br>
         <li><b>Scheduled Changes</b>
@@ -338,7 +321,6 @@ The 98_TadoDevice.pm contains the code to define the different TadoDevices. The 
         </li>
         <br>
         <ul>
-
             <li><b>nextScheduleChange-start</b>
                 <br> This reading indicates when the next interval of the schedule will begin.
             </li>
@@ -348,7 +330,6 @@ The 98_TadoDevice.pm contains the code to define the different TadoDevices. The 
             <li><b>nextScheduleChange-temperature</b>
                 <br> This reading indicates the desired temperature for the next scheduled change.
             </li>
-
         </ul>
         <br>
         <li><b>Overlay - Manual temperature adjustments</b>
@@ -356,7 +337,6 @@ The 98_TadoDevice.pm contains the code to define the different TadoDevices. The 
         </li>
         <br>
         <ul>
-
             <li><b>overlay-active</b>
                 <br> This reading indicates if such an override is active (<i>1</i>) or inactive (<i>0</i>).
             </li>
@@ -382,7 +362,6 @@ The 98_TadoDevice.pm contains the code to define the different TadoDevices. The 
             <li><b>overlay-termination-remainingTimeInSeconds</b>
                 <br> This reading indicates the remaining time in seconds until the zone / room will be turned back to automatic operation.
             </li>
-
         </ul>
         <br>
         <li><b>Overlay - Manual temperature adjustments</b>
@@ -390,7 +369,6 @@ The 98_TadoDevice.pm contains the code to define the different TadoDevices. The 
         </li>
         <br>
         <ul>
-
             <li><b>airComfort_humidityLevel</b>
                 <br> An english, human readable expression defining the air comfort of your current humidity level.
             </li>
@@ -405,10 +383,8 @@ The 98_TadoDevice.pm contains the code to define the different TadoDevices. The 
             </li>
         </ul>
     </ul>
-
     <br>
     <br>
-
     <b>Generated Readings/Events for subtype <i>thermostat</i> and <i>bridge</i>:</b>
     <br>
     <br>
@@ -431,10 +407,8 @@ The 98_TadoDevice.pm contains the code to define the different TadoDevices. The 
             </li>
         </ul>
     </ul>
-
     <br>
     <br>
-
     <b>Generated Readings/Events for subtype <i>mobile_device</i>:</b>
     <br>
     <br>
@@ -472,10 +446,8 @@ The 98_TadoDevice.pm contains the code to define the different TadoDevices. The 
             </li>
         </ul>
     </ul>
-
     <br>
     <br>
-
     <b>Generated Readings/Events for subtype <i>weather</i>:</b>
     <br>
     <br>
@@ -503,5 +475,4 @@ The 98_TadoDevice.pm contains the code to define the different TadoDevices. The 
             </li>
         </ul>
     </ul>
-
 </ul>
