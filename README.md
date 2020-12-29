@@ -1,15 +1,16 @@
 # FHEM-Tado
 A FHEM extension to interact with Tado cloud
 
-Latest Update:  
+Latest Update:
+<br>
 <b>29.12.2020:</b>
   - Implemented OAuth Authentication (Thanks to Psych160)
   - Updated this readme and the module help  
 <br>
 <br>
 The FHEM extension requires two files:
- - 98_Tado.pm
- - 98_TadoDevice.pm
+  - 98_Tado.pm
+  - 98_TadoDevice.pm
 
 The extension is build based on the two-tier module concept.
 The 98_Tado.pm contains the source code to define a Tado device. The Tado device acts like a bridge and manages the communication towards the Tado cloud.
