@@ -7,7 +7,7 @@ Latest Update:
   - Implemented OAuth Authentication (Thanks to Psych160)
   - Updated this readme and the module help  
 <br>
-<br>
+
 The FHEM extension requires two files:
   - 98_Tado.pm
   - 98_TadoDevice.pm
