@@ -2,11 +2,11 @@
 A FHEM extension to interact with Tado cloud
 
 Latest Update:  
-29.12.2020 
+<b>29.12.2020:</b>
   - Implemented OAuth Authentication (Thanks to Psych160)
-  - Updated this readme and the module help
-  
-
+  - Updated this readme and the module help  
+  <br>
+<br>
 The FHEM extension requires two files:
  - 98_Tado.pm
  - 98_TadoDevice.pm
