@@ -9,7 +9,6 @@ use HttpUtils;
 use JSON;
 
 
-#TODO change logic from sync web handling to async
 
 
 my %Tado_gets = (
@@ -25,7 +24,8 @@ my %Tado_sets = (
 start	=> " ",
 stop => " ",
 interval => " ",
-presence => " "
+presence => " ",
+refreshToken  => " ",
 );
 
 my %Tado_HomeAwayStatus = (
@@ -35,21 +35,30 @@ AWAY => " ",
 
 
 my  %url = (
-getZoneTemperature     => 'https://my.tado.com/api/v2/homes/#HomeID#/zones/#ZoneID#/state?username=#Username#&password=#Password#',
-setZoneTemperature     => 'https://my.tado.com/api/v2/homes/#HomeID#/zones/#ZoneID#/overlay?username=#Username#&password=#Password#',
-earlyStart             => 'https://my.tado.com/api/v2/homes/#HomeID#/zones/#ZoneID#/earlyStart?username=#Username#&password=#Password#',
-getZoneDetails         => 'https://my.tado.com/api/v2/homes/#HomeID#/zones?username=#Username#&password=#Password#' ,
-getHomeId              => 'https://my.tado.com/api/v2/me?username=#Username#&password=#Password#',
-getMobileDevices       => 'https://my.tado.com/api/v2/me?username=#Username#&password=#Password#',
-getHomeDetails         =>  'https://my.tado.com/api/v2/homes/#HomeID#?username=#Username#&password=#Password#',
-getWeather             =>  'https://my.tado.com/api/v2/homes/#HomeID#/weather?username=#Username#&password=#Password#',
-getDevices             =>  'https://my.tado.com/api/v2/homes/#HomeID#/devices?username=#Username#&password=#Password#',
-identifyDevice    		 =>  'https://my.tado.com/api/v2/devices/#DeviceId#/identify?username=#Username#&password=#Password#',
-getAirComfort          =>  'https://my.tado.com/api/v2/homes/#HomeID#/airComfort?username=#Username#&password=#Password#',
-setPresenceStatus      =>  'https://my.tado.com/api/v2/homes/#HomeID#/presenceLock?username=#Username#&password=#Password#',
-getPresenceStatus      =>  'https://my.tado.com/api/v2/homes/#HomeID#/state?username=#Username#&password=#Password#',
+getOAuthToken          => 'https://auth.tado.com/oauth/token',
+getZoneTemperature     => 'https://my.tado.com/api/v2/homes/#HomeID#/zones/#ZoneID#/state',
+setZoneTemperature     => 'https://my.tado.com/api/v2/homes/#HomeID#/zones/#ZoneID#/overlay',
+earlyStart             => 'https://my.tado.com/api/v2/homes/#HomeID#/zones/#ZoneID#/earlyStart',
+getZoneDetails         => 'https://my.tado.com/api/v2/homes/#HomeID#/zones' ,
+getHomeId              => 'https://my.tado.com/api/v2/me',
+getMobileDevices       => 'https://my.tado.com/api/v2/me',
+getHomeDetails         =>  'https://my.tado.com/api/v2/homes/#HomeID#',
+getWeather             =>  'https://my.tado.com/api/v2/homes/#HomeID#/weather',
+getDevices             =>  'https://my.tado.com/api/v2/homes/#HomeID#/devices',
+identifyDevice    		 =>  'https://my.tado.com/api/v2/devices/#DeviceId#/identify',
+getAirComfort          =>  'https://my.tado.com/api/v2/homes/#HomeID#/airComfort',
+setPresenceStatus      =>  'https://my.tado.com/api/v2/homes/#HomeID#/presenceLock',
+getPresenceStatus      =>  'https://my.tado.com/api/v2/homes/#HomeID#/state',
 );
 
+
+# OAuth Settings - Thanks to Philipp Wolfmajer (https://git.wolfmajer.at)
+my %oauth = (
+client_id     => 'public-api-preview',
+client_secret => '4HJGRffVR8xb3XdEUQpjgZ1VplJi6Xgw',
+scope         => 'home.user',
+tokenFile     => "./FHEM/FhemUtils/Tado_token",
+);
 
 sub Tado_Initialize($)
 {
@@ -161,15 +170,194 @@ sub Tado_Undef($$)
 }
 
 
-sub Tado_httpSimpleOperation($$$;$)
+
+sub Tado_LoadToken {
+    my $hash          = shift;
+    my $name          = $hash->{NAME};
+    my $tokenLifeTime = $hash->{TOKEN_LIFETIME};
+    $tokenLifeTime = 0 if ( !defined $tokenLifeTime || $tokenLifeTime eq '' );
+    my $Token = undef;
+
+   	$Token = $hash->{'.TOKEN'} ;	
+
+        if ( $@ || $tokenLifeTime < gettimeofday() ) {
+            Log3 $name, 5,
+              "Tado $name" . ": "
+              . "Error while loading: $@ ,requesting new one"
+              if $@;
+            Log3 $name, 5,
+              "Tado $name" . ": " . "Token is expired, requesting new one"
+              if $tokenLifeTime < gettimeofday();
+            $Token = Tado_NewTokenRequest($hash);
+        }
+        else {
+            Log3 $name, 5,
+                "Tado $name" . ": "
+              . "Token expires at "
+              . localtime($tokenLifeTime);
+
+            # if token is about to expire, refresh him
+            if ( ( $tokenLifeTime - 45 ) < gettimeofday() ) {
+                Log3 $name, 5,
+                  "Tado $name" . ": " . "Token will expire soon, refreshing";
+                $Token = Tado_TokenRefresh($hash);
+            }
+        }
+        return $Token if $Token;
+}
+
+sub Tado_NewTokenRequest {
+    my $hash          = shift;
+    my $name          = $hash->{NAME};
+	my $password =  tado_decrypt(InternalVal($name,'Password', undef));
+	my $username =  InternalVal($name,'Username', undef);
+
+    Log3 $name, 5, "Tado $name" . ": " . "calling NewTokenRequest()";
+
+    my $data = {
+        client_id     =>  $oauth{client_id},
+        client_secret => $oauth{client_secret},
+        username      => $username,
+        password      => $password,
+        scope         => $oauth{scope},
+        grant_type    => 'password'
+    };
+
+    my $param = {
+        url     => $url{getOAuthToken},
+        method  => 'POST',
+        timeout => 5,
+        hash    => $hash,
+        data    => $data
+    };
+
+    #Log3 $name, 5, 'Blocking GET: ' . Dumper($param);
+    #Log3 $name, $reqDebug, "Tado $name" . ": " . "Request $AuthURL";
+    my ( $err, $returnData ) = HttpUtils_BlockingGet($param);
+
+    if ( $err ne "" ) {
+        Log3 $name, 3,
+            "Tado $name" . ": "
+          . "NewTokenRequest: Error while requesting "
+          . $param->{url}
+          . " - $err";
+    }
+    elsif ( $returnData ne "" ) {
+        Log3 $name, 5, "url " . $param->{url} . " returned: $returnData";
+        my $decoded_data = eval { decode_json($returnData) };
+        if ($@) {
+            Log3 $name, 3, "Tado $name" . ": "
+              . "NewTokenRequest: decode_json failed, invalid json. error: $@ ";
+        }
+        else {
+            #write token data in hash
+			 if (defined($decoded_data)){
+              $hash->{'.TOKEN'} = $decoded_data;
+            }
+
+            # token lifetime management
+            if (defined($decoded_data)){
+              $hash->{TOKEN_LIFETIME} = gettimeofday() + $decoded_data->{'expires_in'};
+            }
+            $hash->{TOKEN_LIFETIME_HR} = localtime( $hash->{TOKEN_LIFETIME} );
+            Log3 $name, 5,
+                "Tado $name" . ": "
+              . "Retrived new authentication token successfully. Valid until "
+              . localtime( $hash->{TOKEN_LIFETIME} );
+            $hash->{STATE} = "reachable";
+            return $decoded_data;
+        }
+    }
+    return;
+}
+
+sub Tado_TokenRefresh {
+    my $hash          = shift;
+    my $name          = $hash->{NAME};
+
+    my $Token         = undef;
+
+    # load token
+    $Token = $hash->{'.TOKEN'};
+
+    my $data = {
+        client_id     => $oauth{client_id},
+        client_secret => $oauth{client_secret},
+        scope         => $oauth{scope},
+        grant_type    => 'refresh_token',
+        refresh_token => $Token->{'refresh_token'}
+    };
+
+    my $param = {
+        url     => $url{getOAuthToken},
+        method  => 'POST',
+        timeout => 5,
+        hash    => $hash,
+        data    => $data
+    };
+
+    #Log3 $name, 5, 'Blocking GET TokenRefresh: ' . Dumper($param);
+    #Log3 $name, $reqDebug, "Tado $name" . ": " . "Request $AuthURL";
+    my ( $err, $returnData ) = HttpUtils_BlockingGet($param);
+
+    if ( $err ne "" ) {
+        Log3 $name, 3,
+            "Tado $name" . ": "
+          . "TokenRefresh: Error in token retrival while requesting "
+          . $param->{url}
+          . " - $err";
+        $hash->{STATE} = "error";
+    }
+
+    elsif ( $returnData ne "" ) {
+        Log3 $name, 5, "url " . $param->{url} . " returned: $returnData";
+        my $decoded_data = eval { decode_json($returnData); };
+
+        if ($@) {
+            Log3 $name, 3,
+              "Tado $name" . ": "
+              . "TokenRefresh: decode_json failed, invalid json. error:$@\n"
+              if $@;
+            $hash->{STATE} = "error";
+        }
+        else {
+            #write token data in file
+			 if (defined($decoded_data)){
+              $hash->{'.TOKEN'} = $decoded_data;
+
+            }
+
+            # token lifetime management
+            $hash->{TOKEN_LIFETIME} =
+              gettimeofday() + $decoded_data->{'expires_in'};
+            $hash->{TOKEN_LIFETIME_HR} = localtime( $hash->{TOKEN_LIFETIME} );
+            Log3 $name, 5,
+                "Tado $name" . ": "
+              . "TokenRefresh: Refreshed authentication token successfully. Valid until "
+              . localtime( $hash->{TOKEN_LIFETIME} );
+            $hash->{STATE} = "reachable";
+            return $decoded_data;
+        }
+    }
+    return;
+}
+
+
+sub Tado_httpSimpleOperationOAuth($$$;$)
 {
 	my ($hash,$url, $operation, $message) = @_;
 	my ($json,$err,$data,$decoded);
 	my $name = $hash->{NAME};
+	my $CurrentTokenData = Tado_LoadToken($hash);
+
+    Log3 $name, 3, "$CurrentTokenData->{'token_type'} $CurrentTokenData->{'access_token'}";
 
 	my $request = {
 		url           => $url,
-		header        => "Content-Type:application/json;charset=UTF-8",
+        header => {
+                 "Content-Type" => "application/json;charset=UTF-8",
+                 "Authorization" => "$CurrentTokenData->{'token_type'} $CurrentTokenData->{'access_token'}"
+                 },
 		method        => $operation,
 		timeout       =>  2,
 		hideurl       =>  1
@@ -280,7 +468,7 @@ sub Tado_Set($@)
 
 	if(!defined($Tado_sets{$opt})) {
 		my @cList = keys %Tado_sets;
-		return "Unknown argument $opt, choose one of start stop interval presence:HOME,AWAY";
+		return "Unknown argument $opt, choose one of refreshToken start stop interval presence:HOME,AWAY";
 	}
 
 	if ($opt eq "start")	{
@@ -297,7 +485,14 @@ sub Tado_Set($@)
 		Log3 $name, 1, sprintf("Tado_Set %s: Updated readings and started timer to automatically update readings with interval %s", $name, InternalVal($name,'INTERVAL', undef));
 
 
-	} elsif ($opt eq "stop"){
+	}    elsif ( $opt eq 'refreshToken' ) {
+         Log3 $name, 3, "Tado: set $name: processing ($opt)";
+         Tado_LoadToken($hash);
+         Log3 $name, 3, "Tado $name" . ": " . "$opt finished\n";
+     }
+
+
+	elsif ($opt eq "stop"){
 
 		RemoveInternalTimer($hash);
 		Log3 $name, 1, "Tado_Set $name: Stopped the timer to automatically update readings";
@@ -353,14 +548,7 @@ sub Tado_GetHomesAndDevices($)
 	}
 
 	my $readTemplate = $url{"getHomeId"};
-
-	my $passwd = urlEncode(tado_decrypt(InternalVal($name,'Password', undef)));
-	my $user = urlEncode(InternalVal($name,'Username', undef));
-
-	$readTemplate =~ s/#Username#/$user/g;
-	$readTemplate =~ s/#Password#/$passwd/g;
-
-	my $d = Tado_httpSimpleOperation( $hash , $readTemplate, 'GET' );
+	my $d = Tado_httpSimpleOperationOAuth( $hash , $readTemplate, 'GET' );
 
 	if (defined $d && ref($d) eq "HASH" && defined $d->{errors}){
 
@@ -415,16 +603,9 @@ sub Tado_GetZones($)
 
 	my $readTemplate = $url{"getZoneDetails"};
 
-	my $passwd = urlEncode(tado_decrypt(InternalVal($name,'Password', undef)));
-	my $user = urlEncode(InternalVal($name,'Username', undef));
-
-
 	$readTemplate =~ s/#HomeID#/$homeID/g;
-	$readTemplate =~ s/#Username#/$user/g;
-	$readTemplate =~ s/#Password#/$passwd/g;
 
-
-	my $d = Tado_httpSimpleOperation( $hash , $readTemplate, 'GET'  );
+	my $d = Tado_httpSimpleOperationOAuth( $hash , $readTemplate, 'GET'  );
 
 	if (defined $d && ref($d) eq "HASH" && defined $d->{errors}){
 		log 1, Dumper $d;
@@ -531,17 +712,9 @@ sub Tado_GetDevices($)
 	}
 
 	my $readTemplate = $url{"getDevices"};
-
-	my $passwd = urlEncode(tado_decrypt(InternalVal($name,'Password', undef)));
-	my $user = urlEncode(InternalVal($name,'Username', undef));
-
-
 	$readTemplate =~ s/#HomeID#/$homeID/g;
-	$readTemplate =~ s/#Username#/$user/g;
-	$readTemplate =~ s/#Password#/$passwd/g;
 
-
-	my $d = Tado_httpSimpleOperation( $hash , $readTemplate, 'GET'  );
+	my $d = Tado_httpSimpleOperationOAuth( $hash , $readTemplate, 'GET'  );
 
 	if (defined $d && ref($d) eq "HASH" && defined $d->{errors}){
 		log 1, Dumper $d;
@@ -622,15 +795,7 @@ sub Tado_GetMobileDevices($)
 	}
 
 	my $readTemplate = $url{"getMobileDevices"};
-
-	my $passwd = urlEncode(tado_decrypt(InternalVal($name,'Password', undef)));
-	my $user = urlEncode(InternalVal($name,'Username', undef));
-
-	$readTemplate =~ s/#Username#/$user/g;
-	$readTemplate =~ s/#Password#/$passwd/g;
-
-
-	my $d = Tado_httpSimpleOperation( $hash , $readTemplate, 'GET'  );
+	my $d = Tado_httpSimpleOperationOAuth( $hash , $readTemplate, 'GET'  );
 
 	if (defined $d && ref($d) eq "HASH" && defined $d->{errors}){
 		log 1, Dumper $d;
@@ -784,15 +949,10 @@ sub Tado_GetEarlyStart($)
 
 		my $readTemplate = $url{earlyStart};
 
-		my $passwd = urlEncode(tado_decrypt(InternalVal($name,'Password', undef)));
-		my $user = urlEncode(InternalVal($name,'Username', undef));
-
 		$readTemplate =~ s/#HomeID#/$homeID/g;
 		$readTemplate =~ s/#ZoneID#/$i/g;
-		$readTemplate =~ s/#Username#/$user/g;
-		$readTemplate =~ s/#Password#/$passwd/g;
 
-		my $d = Tado_httpSimpleOperation( $hash , $readTemplate, 'GET'  );
+		my $d = Tado_httpSimpleOperationOAuth( $hash , $readTemplate, 'GET'  );
 
 		my $message = "Tado;$i;earlyStart;$d->{enabled}";
 
@@ -881,20 +1041,19 @@ sub Tado_RequestEarlyStartUpdate($)
 	foreach my $i (split /, /,  InternalVal($name,'ZoneIDs', undef)) {
 
 		my $readTemplate = $url{earlyStart};
-
-		my $passwd = urlEncode(tado_decrypt(InternalVal($name,'Password', undef)));
-		my $user = urlEncode(InternalVal($name,'Username', undef));
-
 		my $ZoneName = "Zone_" . $i . "_ID";
 
 		$readTemplate =~ s/#HomeID#/$homeID/g;
 		$readTemplate =~ s/#ZoneID#/$i/g;
-		$readTemplate =~ s/#Username#/$user/g;
-		$readTemplate =~ s/#Password#/$passwd/g;
+
+	    my $CurrentTokenData = Tado_LoadToken($hash);
 
 		my $request = {
 			url           => $readTemplate,
-			header        => "Content-Type:application/json;charset=UTF-8",
+            header => {
+                 "Content-Type" => "application/json;charset=UTF-8",
+                 "Authorization" => "$CurrentTokenData->{'token_type'} $CurrentTokenData->{'access_token'}"
+                 },
 			method        => 'GET',
 			timeout       =>  2,
 			hideurl       =>  1,
@@ -1234,16 +1393,16 @@ sub Tado_RequestWeatherUpdate($)
 
 	Log3 $name, 4, "Tado_RequestWeatherUpdate Called. Name: $name";
 	my $readTemplate = $url{getWeather};
-	my $passwd = urlEncode(tado_decrypt(InternalVal($name,'Password', undef)));
-	my $user = urlEncode(InternalVal($name,'Username', undef));
+	my $CurrentTokenData = Tado_LoadToken($hash);
 
 	$readTemplate =~ s/#HomeID#/$homeID/g;
-	$readTemplate =~ s/#Username#/$user/g;
-	$readTemplate =~ s/#Password#/$passwd/g;
 
 	my $request = {
 		url           => $readTemplate,
-		header        => "Content-Type:application/json;charset=UTF-8",
+        header => {
+                 "Content-Type" => "application/json;charset=UTF-8",
+                 "Authorization" => "$CurrentTokenData->{'token_type'} $CurrentTokenData->{'access_token'}"
+                 },
 		method        => 'GET',
 		timeout       =>  2,
 		hideurl       =>  1,
@@ -1287,16 +1446,16 @@ sub Tado_RequestDeviceUpdate($)
 
 	Log3 $name, 4, "Tado_RequestDeviceUpdate Called. Name: $name";
 	my $readTemplate = $url{getDevices};
-	my $passwd = urlEncode(tado_decrypt(InternalVal($name,'Password', undef)));
-	my $user = urlEncode(InternalVal($name,'Username', undef));
+	my $CurrentTokenData = Tado_LoadToken($hash);
 
-	$readTemplate =~ s/#Username#/$user/g;
-	$readTemplate =~ s/#Password#/$passwd/g;
 	$readTemplate =~ s/#HomeID#/$homeID/g;
 
 	my $request = {
 		url           => $readTemplate,
-		header        => "Content-Type:application/json;charset=UTF-8",
+        header => {
+                 "Content-Type" => "application/json;charset=UTF-8",
+                 "Authorization" => "$CurrentTokenData->{'token_type'} $CurrentTokenData->{'access_token'}"
+                 },
 		method        => 'GET',
 		timeout       =>  2,
 		hideurl       =>  1,
@@ -1333,16 +1492,16 @@ sub Tado_RequestPresenceUpdate($)
 
 	Log3 $name, 4, "Tado_RequestPresenceUpdate Called. Name: $name";
 	my $readTemplate = $url{getPresenceStatus};
-	my $passwd = urlEncode(tado_decrypt(InternalVal($name,'Password', undef)));
-	my $user = urlEncode(InternalVal($name,'Username', undef));
+	my $CurrentTokenData = Tado_LoadToken($hash);
 
-	$readTemplate =~ s/#Username#/$user/g;
-	$readTemplate =~ s/#Password#/$passwd/g;
 	$readTemplate =~ s/#HomeID#/$homeID/g;
 
 	my $request = {
 		url           => $readTemplate,
-		header        => "Content-Type:application/json;charset=UTF-8",
+        header => {
+                 "Content-Type" => "application/json;charset=UTF-8",
+                 "Authorization" => "$CurrentTokenData->{'token_type'} $CurrentTokenData->{'access_token'}"
+                 },
 		method        => 'GET',
 		timeout       =>  2,
 		hideurl       =>  1,
@@ -1379,15 +1538,14 @@ sub Tado_RequestMobileDeviceUpdate($)
 
 	Log3 $name, 4, "Tado_RequestMobileDeviceUpdate Called. Name: $name";
 	my $readTemplate = $url{getMobileDevices};
-	my $passwd = urlEncode(tado_decrypt(InternalVal($name,'Password', undef)));
-	my $user = urlEncode(InternalVal($name,'Username', undef));
-
-	$readTemplate =~ s/#Username#/$user/g;
-	$readTemplate =~ s/#Password#/$passwd/g;
+	my $CurrentTokenData = Tado_LoadToken($hash);
 
 	my $request = {
 		url           => $readTemplate,
-		header        => "Content-Type:application/json;charset=UTF-8",
+        header => {
+                 "Content-Type" => "application/json;charset=UTF-8",
+                 "Authorization" => "$CurrentTokenData->{'token_type'} $CurrentTokenData->{'access_token'}"
+                 },
 		method        => 'GET',
 		timeout       =>  2,
 		hideurl       =>  1,
@@ -1624,7 +1782,7 @@ sub Tado_UpdateAirComfortCallback($)
 
 
 		 $message .= $param->{temperatureLevel} . ";"
-			. $param->{humidityLevel} . ";"
+			. $param->{humidityLevel} . ";"	
 			. $param->{coordinate}->{radial} . ";"
 			. $param->{coordinate}->{angular} . ";";
 
@@ -1707,18 +1865,17 @@ sub Tado_RequestZoneUpdate($)
 
 		my $readTemplate = $url{"getZoneTemperature"};
 
-		my $passwd = urlEncode(tado_decrypt(InternalVal($name,'Password', undef)));
-		my $user = urlEncode(InternalVal($name,'Username', undef));
-
+	   my $CurrentTokenData = Tado_LoadToken($hash);
 
 		$readTemplate =~ s/#HomeID#/$homeID/g;
 		$readTemplate =~ s/#ZoneID#/$i/g;
-		$readTemplate =~ s/#Username#/$user/g;
-		$readTemplate =~ s/#Password#/$passwd/g;
 
 		my $request = {
 			url           => $readTemplate,
-			header        => "Content-Type:application/json;charset=UTF-8",
+            header => {
+                 "Content-Type" => "application/json;charset=UTF-8",
+                 "Authorization" => "$CurrentTokenData->{'token_type'} $CurrentTokenData->{'access_token'}"
+                 },
 			method        => 'GET',
 			timeout       =>  2,
 			hideurl       =>  1,
@@ -1761,18 +1918,18 @@ sub Tado_RequestAirComfortUpdate($)
 	Log3 $name, 3, "Getting air comfort update.";
 
 	my $readTemplate = $url{"getAirComfort"};
-
-	my $passwd = urlEncode(tado_decrypt(InternalVal($name,'Password', undef)));
-	my $user = urlEncode(InternalVal($name,'Username', undef));
+	my $CurrentTokenData = Tado_LoadToken($hash);
 
 
 	$readTemplate =~ s/#HomeID#/$homeID/g;
-	$readTemplate =~ s/#Username#/$user/g;
-	$readTemplate =~ s/#Password#/$passwd/g;
+
 
 	my $request = {
 		url           => $readTemplate,
-		header        => "Content-Type:application/json;charset=UTF-8",
+        header => {
+                 "Content-Type" => "application/json;charset=UTF-8",
+                 "Authorization" => "$CurrentTokenData->{'token_type'} $CurrentTokenData->{'access_token'}"
+                 },
 		method        => 'GET',
 		timeout       =>  2,
 		hideurl       =>  1,
@@ -1794,20 +1951,14 @@ sub Tado_UpdatePresenceStatus($$)
 	 my $name = $hash->{NAME};
 
 		my $readTemplate = $url{"setPresenceStatus"};
-
-		my $passwd = urlEncode(tado_decrypt(InternalVal($name,'Password', undef)));
-		my $user = urlEncode(InternalVal($name,'Username', undef));
 		my $homeID = ReadingsVal ($name,"HomeID",undef);
 
 		$readTemplate =~ s/#HomeID#/$homeID/g;
-		$readTemplate =~ s/#Username#/$user/g;
-		$readTemplate =~ s/#Password#/$passwd/g;
-
 
 		my %message ;
 		$message{'homePresence'} = $homeAwayStatus;
 
-		my $d = Tado_httpSimpleOperation( $hash , $readTemplate, 'PUT',  encode_json \%message  );
+		my $d = Tado_httpSimpleOperationOAuth( $hash , $readTemplate, 'PUT',  encode_json \%message  );
 
 		Tado_RequestPresenceUpdate($hash);
 		return undef;
@@ -1827,17 +1978,10 @@ sub Tado_Write ($$)
 		my $temperature = $param2;
 
 		my $readTemplate = $url{"setZoneTemperature"};
-
-		my $passwd = urlEncode(tado_decrypt(InternalVal($name,'Password', undef)));
-		my $user = urlEncode(InternalVal($name,'Username', undef));
-
 		my $homeID = ReadingsVal ($name,"HomeID",undef);
 
 		$readTemplate =~ s/#HomeID#/$homeID/g;
 		$readTemplate =~ s/#ZoneID#/$zoneID/g;
-		$readTemplate =~ s/#Username#/$user/g;
-		$readTemplate =~ s/#Password#/$passwd/g;
-
 
 		my %message ;
 		$message{'setting'}{'type'} = "HEATING";
@@ -1856,14 +2000,14 @@ sub Tado_Write ($$)
 			$message{'termination'}{'type'}  = 'MANUAL';
 		} elsif ($duration eq 'Auto') {
 			Log3 $name, 4, 'Return to automatic mode';
-			my $d = Tado_httpSimpleOperation( $hash , $readTemplate, 'DELETE'  );
+			my $d = Tado_httpSimpleOperationOAuth( $hash , $readTemplate, 'DELETE'  );
 			return undef;
 		} else {
 			$message{'termination'}{'type'}  = 'TIMER';
 			$message{'termination'}{'durationInSeconds'} = $duration * 60;
 		}
 
-		my $d = Tado_httpSimpleOperation( $hash , $readTemplate, 'PUT',  encode_json \%message  );
+		my $d = Tado_httpSimpleOperationOAuth( $hash , $readTemplate, 'PUT',  encode_json \%message  );
 		return undef;
 	}
 
@@ -1873,20 +2017,15 @@ sub Tado_Write ($$)
 
 		my $readTemplate = $url{"earlyStart"};
 
-		my $passwd = urlEncode(tado_decrypt(InternalVal($name,'Password', undef)));
-		my $user = urlEncode(InternalVal($name,'Username', undef));
-
 		my $homeID = ReadingsVal ($name,"HomeID",undef);
 
 		$readTemplate =~ s/#HomeID#/$homeID/g;
 		$readTemplate =~ s/#ZoneID#/$zoneID/g;
-		$readTemplate =~ s/#Username#/$user/g;
-		$readTemplate =~ s/#Password#/$passwd/g;
 
 		my %message ;
 		$message{'enabled'} = $setting;
 
-		my $d = Tado_httpSimpleOperation( $hash , $readTemplate, 'PUT' , encode_json \%message  );
+		my $d = Tado_httpSimpleOperationOAuth( $hash , $readTemplate, 'PUT' , encode_json \%message  );
 
 		if (defined $d && ref($d) eq "HASH" && defined $d->{errors}){
 			return "Error: $d->{errors}[0]->{code} / $d->{errors}[0]->{title}";
@@ -1909,14 +2048,9 @@ sub Tado_Write ($$)
 	if ($code eq 'Hi')
 	{
 		my $readTemplate = $url{"identifyDevice"};
-		my $passwd = urlEncode(tado_decrypt(InternalVal($name,'Password', undef)));
-		my $user = urlEncode(InternalVal($name,'Username', undef));
-
 		$readTemplate =~ s/#DeviceId#/$zoneID/g;
-		$readTemplate =~ s/#Username#/$user/g;
-		$readTemplate =~ s/#Password#/$passwd/g;
 
-		my $d = Tado_httpSimpleOperation( $hash , $readTemplate, 'POST'  );
+		my $d = Tado_httpSimpleOperationOAuth( $hash , $readTemplate, 'POST'  );
 
 		if (defined $d && ref($d) eq "HASH" && defined $d->{errors}){
 			return "Error: $d->{errors}[0]->{code} / $d->{errors}[0]->{title}";
@@ -1975,6 +2109,37 @@ sub tado_decrypt($)
 <h3>Tado</h3>
 <ul>
     <i>Tado</i> implements an interface to the Tado cloud. The plugin can be used to read and write temperature and settings from or to the Tado cloud. The communication is based on the reengineering of the protocol done by Stephen C. Phillips. See <a href="http://blog.scphillips.com/posts/2017/01/the-tado-api-v2/">his blog</a> for more details. Not all functions are implemented within this FHEM extension. By now the plugin is capable to interact with the so called zones (rooms) and the registered devices. The devices cannot be controlled directly. All interaction - like setting a temperature - must be done via the zone and not the device. This means all configuration like the registration of new devices or the assignment of a device to a room must be done using the Tado app or Tado website directly. Once the configuration is completed this plugin can be used. This device is the 'bridge device' like a HueBridge or a CUL. Per zone or device a dedicated device of type 'TadoDevice' will be created.
+    The following features / functionalities are defined by now when using Tado and TadoDevices:
+    <ul>
+    	<li>Tado Bridge
+    	<br><ul>
+    		<li>Manages the communication towards the Tado cloud environment and documents the status in several readings like which data was refreshed, when it was rerefershed, etc.</li>
+    		<li><b>Overall Presence status</b> Indicates wether at least one mobile device is 'at Home'</li>
+    		<li><b>Overall Air Comfort</b> Indicates the air comfort of the whole home.</li> 
+    	</ul></li>
+    	<li>Zone (basically a room)
+    	<br><ul>
+    		<li><b>Temperature Management:</b> Displays the current temperature, allows to set the desired temperature including the Tado modes which can do this manually or automatically</li>
+    		<li><b>Zone Air Comfort</b> Indicates the air comfort of the specific room.</li> 
+    	</ul></li>
+    	<li>Device
+    	   <br><ul>
+    		<li><b>Connection State:</b> Indicate when the actual device was seen the last time</li>
+    		<li><b>Battery Level</b> Indicates the current battery level of the device.</li> 
+       		<li><b>Find device</b> Output a 'Hi' message on the display to identify the specific device</li> 
+    	</ul></li>
+    	<li>Mobile Device<
+    	  <br><ul>
+    		<li><b>Device Configration:</b> Displays information about the device type and the current configuration (view only)</li>
+    		<li><b>Presence status</b> Indicates if the specific mobile device is Home or Away.</li> 
+    	</ul></li>
+    	<li>Weather
+    	  <br><ul>
+    		<li>Displays information about the ouside waether and the solar intensity (cloud source, not actually measured).</li>
+    	</ul></li>
+    </ul>	
+    <br>
+    While previous versions of this plugin were using plain authentication encoding the username and the password directly in the URL this version now uses OAuth2 which does a secure authentication and uses security tokens afterwards. This is a huge security improvement. The implementation is based on code written by Philipp (Psycho160). Thanks for sharing.
     <br>
     <br>
     <a name="Tadodefine"></a>

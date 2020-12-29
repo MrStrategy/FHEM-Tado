@@ -1,6 +1,12 @@
 # FHEM-Tado
 A FHEM extension to interact with Tado cloud
 
+Latest Update:  
+29.12.2020 
+  - Implemented OAuth Authentication (Thanks to Psych160)
+  - Updated this readme and the module help
+  
+
 The FHEM extension requires two files:
  - 98_Tado.pm
  - 98_TadoDevice.pm
@@ -15,16 +21,42 @@ The 98_TadoDevice.pm contains the code to define the different TadoDevices. The 
 <li>- Add validation on inserted serial numbers</li>
 </ul>
 
-<h2>There are still some things todo which I have not done so far:</h2>
-<ul>
-    <li>- Parse the several date information and bring this to local time</li>
-    <li>- Add validation on inserted serial numbers</li>
-</ul>
-
 <a name="Tado"></a>
 <h3>Tado</h3>
 <ul>
     <i>Tado</i> implements an interface to the Tado cloud. The plugin can be used to read and write temperature and settings from or to the Tado cloud. The communication is based on the reengineering of the protocol done by Stephen C. Phillips. See <a href="http://blog.scphillips.com/posts/2017/01/the-tado-api-v2/">his blog</a> for more details. Not all functions are implemented within this FHEM extension. By now the plugin is capable to interact with the so called zones (rooms) and the registered devices. The devices cannot be controlled directly. All interaction - like setting a temperature - must be done via the zone and not the device. This means all configuration like the registration of new devices or the assignment of a device to a room must be done using the Tado app or Tado website directly. Once the configuration is completed this plugin can be used. This device is the 'bridge device' like a HueBridge or a CUL. Per zone or device a dedicated device of type 'TadoDevice' will be created.
+    <br>
+    The following features / functionalities are defined by now when using Tado and TadoDevices:
+    <ul>
+        <li>Tado Bridge
+        <br><ul>
+            <li>Manages the communication towards the Tado cloud environment and documents the status in several readings like which data was refreshed, when it was rerefershed, etc.</li>
+            <li><b>Overall Presence status</b> Indicates wether at least one mobile device is 'at Home'</li>
+            <li><b>Overall Air Comfort</b> Indicates the air comfort of the whole home.</li> 
+        </ul></li>
+        <li>Zone (basically a room)
+        <br><ul>
+            <li><b>Temperature Management:</b> Displays the current temperature, allows to set the desired temperature including the Tado modes which can do this manually or automatically</li>
+            <li><b>Zone Air Comfort</b> Indicates the air comfort of the specific room.</li> 
+        </ul></li>
+        <li>Device
+           <br><ul>
+            <li><b>Connection State:</b> Indicate when the actual device was seen the last time</li>
+            <li><b>Battery Level</b> Indicates the current battery level of the device.</li> 
+            <li><b>Find device</b> Output a 'Hi' message on the display to identify the specific device</li> 
+        </ul></li>
+        <li>Mobile Device<
+          <br><ul>
+            <li><b>Device Configration:</b> Displays information about the device type and the current configuration (view only)</li>
+            <li><b>Presence status</b> Indicates if the specific mobile device is Home or Away.</li> 
+        </ul></li>
+        <li>Weather
+          <br><ul>
+            <li>Displays information about the ouside waether and the solar intensity (cloud source, not actually measured).</li>
+        </ul></li>
+    </ul>   
+    <br>
+    While previous versions of this plugin were using plain authentication encoding the username and the password directly in the URL this version now uses OAuth2 which does a secure authentication and uses security tokens afterwards. This is a huge security improvement. The implementation is based on code written by Philipp (Psycho160). Thanks for sharing.
     <br>
     <br>
     <a name="Tadodefine"></a>

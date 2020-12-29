@@ -282,7 +282,7 @@ sub TadoDevice_Parse ($$)
 	}
 	else
 	{
-		Log3 'TadoDevice', 2, "No device entry found";
+		Log3 'TadoDevice', 2, "TadoDevice: No device entry found for code $code. Tried to process message: $message";
 		return "UNDEFINED. Please define TadoDevice for tado ID $values[0]";
 	}
 }
@@ -377,9 +377,9 @@ sub TadoDevice_Attr(@)
 	my $hash = $defs{$name};
 
 	if (defined $aVal){
-			Log3 $hash, 5, "TadoDevice: $name AttributeChange. CMD: $cmd, name: $aName, value: $aVal.";
+			Log3 $aName, 5, "TadoDevice: $name AttributeChange. CMD: $cmd, name: $aName, value: $aVal.";
 	} else {
-    	Log3 $hash, 5, "TadoDevice: $name AttributeChange. CMD: $cmd, name: $aName";
+    	Log3 $aName, 5, "TadoDevice: $name AttributeChange. CMD: $cmd, name: $aName";
   }
 
 	if ($aName eq "earlyStart") {
