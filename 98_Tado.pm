@@ -659,7 +659,7 @@ sub Tado_GetZones($)
 					}
 				} else {
 					CommandAttr(undef,"$deviceName room Tado");
-					CommandAttr(undef,"$deviceName subType zone");
+					CommandAttr(undef,"$deviceName subType heating");
 				}
 
 			}

@@ -41,7 +41,7 @@ sub TadoDevice_Initialize($)
 	$hash->{ReadFn}     = 'TadoDevice_Read';
 	$hash->{AttrList} =
 	'earlyStart:true,false '
-	. 'subType:zone,bridge,thermostat,weather,mobile_device '
+	. 'subType:zone,heating,air_conditioning,bridge,thermostat,weather,mobile_device '
 	. $readingFnAttributes;
 	$hash->{Match} = "^Tado;.*" ;
 
