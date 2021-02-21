@@ -7,7 +7,7 @@ my %TadoDevice_gets = (
 update	=> " "
 );
 
-my %TadoDevice_zone_sets = (
+my %TadoDevice_heating_sets = (
 automatic             => ' ',
 off       	          => " ",
 'temperature'	          => " ",
@@ -18,6 +18,14 @@ off       	          => " ",
 'temperature-for-240'	=> " ",
 'temperature-for-300'	=> " "
 );
+
+my %TadoDevice_airconditioning_sets = (
+automatic             => ' ',
+off       	          => " ",
+'temperature'	          => " "
+);
+
+
 
 my %TadoDevice_bridge_sets = (
 );
@@ -180,6 +188,10 @@ sub TadoDevice_Parse ($$)
 				readingsDelete($hash, "overlay-termination-remainingTimeInSeconds");
 			}
 
+
+			readingsBulkUpdate($hash, "fanSpeed", $values[27]) if( defined($values[27]) && !($values[27] eq ''));
+			readingsBulkUpdate($hash, "airconditioning_mode", $values[28]) if( defined($values[28]) && !($values[28] eq ''));
+
 			readingsEndUpdate($hash, 1);
 
 
@@ -189,9 +201,9 @@ sub TadoDevice_Parse ($$)
 						readingsSingleUpdate($hash, 'state', sprintf("T: %.1f &deg;C desired: %.1f &deg;C H: %.1f%%", $values[3], $values[8], $values[9]), 1);
 					} else {
 					    if ($values[3] ne '') {
- 	                                        readingsSingleUpdate($hash, 'state', sprintf("T: %.1f &deg;C desired: %.1f &deg;C", $values[3], $values[8]), 1);
+ 	                readingsSingleUpdate($hash, 'state', sprintf("T: %.1f &deg;C desired: %.1f &deg;C", $values[3], $values[8]), 1);
 					    } else {
-	                                        readingsSingleUpdate($hash, 'state', sprintf("desired: %.1f &deg;C", $values[8]), 1);
+	                readingsSingleUpdate($hash, 'state', sprintf("desired: %.1f &deg;C", $values[8]), 1);
 					    }
 					}
 				} else {
@@ -320,8 +332,8 @@ sub TadoDevice_Set($@)
 	my $opt = shift @param;
 	my $value = join("", @param);
 
-	if (AttrVal($name, 'subType', 'nix') eq 'zone') {
-		if(!defined($TadoDevice_zone_sets{$opt})) {
+	if (AttrVal($name, 'subType', 'nix') eq 'heating') {
+		if(!defined($TadoDevice_heating_sets{$opt})) {
 			#my @cList = keys %TadoDevice_zone_sets;
 			my $validValues = TadoDevice_GenerateTemperatureSchema();
 			return "Unknown argument $opt, choose one of " . $validValues; #join(" ", @cList);
@@ -331,12 +343,18 @@ sub TadoDevice_Set($@)
 			my @cList = keys %TadoDevice_bridge_sets;
 			return "Unknown argument $opt, choose one of " . join(" ", @cList);
 		}
+	} elsif (AttrVal($name, 'subType', 'nix') eq 'air_conditioning') {
+		if(!defined($TadoDevice_airconditioning_sets{$opt})) {
+			my $validValues = TadoDevice_GenerateAirconditioningSchema();
+			return "Unknown argument $opt, choose one of " . $validValues; #join(" ", @cList);
+		}
 	} else  {
 		if(!defined($TadoDevice_thermostat_sets{$opt})) {
 			my @cList = keys %TadoDevice_thermostat_sets;
 			return "Unknown argument $opt, choose one of " . join(" ", @cList);
 		}
 	}
+
 
 	if ($opt eq "automatic")	{
 		IOWrite($hash, "Temp", InternalVal($name, "TadoId", undef) , "Auto");
@@ -421,13 +439,37 @@ sub TadoDevice_GenerateTemperatureSchema()
   }
 
  my $response = "";
- foreach my $item (keys %TadoDevice_zone_sets){
+ foreach my $item (keys %TadoDevice_heating_sets){
    if ($item =~ /^temperature/) {$response .= $item.":".$valueString." ";}
    else {$response .= $item." ";}
   }
 
 return $response;
 }
+
+
+sub TadoDevice_GenerateAirconditioningSchema()
+{
+	# temperature options
+	my $temperatureString = "off";
+  for (my $i=5;$i<=25;$i+=0.5){
+	  $temperatureString .= ",$i"
+  }
+
+
+my $response = "";
+foreach my $item (keys %TadoDevice_airconditioning_sets){
+	if ($item =~ /^temperature/) {$response .= $item.":".$temperatureString." ";}
+	else {$response .= $item." ";}
+ }
+
+ $response.= "fanSpeed:auto,low,middle,high ";
+ $response.= "mode:off,heat,cool,dry,fan,auto ";
+ $response.= "swing:on,off ";
+
+return $response;
+}
+
 
 
 1;

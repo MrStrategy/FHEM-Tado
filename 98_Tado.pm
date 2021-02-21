@@ -178,7 +178,7 @@ sub Tado_LoadToken {
     $tokenLifeTime = 0 if ( !defined $tokenLifeTime || $tokenLifeTime eq '' );
     my $Token = undef;
 
-   	$Token = $hash->{'.TOKEN'} ;	
+   	$Token = $hash->{'.TOKEN'} ;
 
         if ( $@ || $tokenLifeTime < gettimeofday() ) {
             Log3 $name, 5,
@@ -659,7 +659,8 @@ sub Tado_GetZones($)
 					}
 				} else {
 					CommandAttr(undef,"$deviceName room Tado");
-					CommandAttr(undef,"$deviceName subType heating");
+					my $subType = lc $item->{type};
+					CommandAttr(undef,"$deviceName subType $subType");
 				}
 
 			}
@@ -1590,13 +1591,14 @@ sub Tado_UpdateZoneCallback($)
 		Log3 $name, 5, 'Decoded: ' . Dumper($d);
 
 
-
-
 		if (defined $d && ref($d) eq "HASH" && defined $d->{errors}){
 			log 1, Dumper $d;
 			readingsSingleUpdate($hash,'state',"Error: $d->{errors}[0]->{code} / $d->{errors}[0]->{title}",1);
 			return undef;
 		}
+
+
+
 
 		my $overlay =  defined $d->{overlay} ? 1 : 0;
 
@@ -1721,6 +1723,15 @@ sub Tado_UpdateZoneCallback($)
 				$message .= ";;;;;;;"
 		}
 
+		#aircondition-fanspeed
+		if ($d->{setting}->{power} eq "OFF" || !lc $d->{setting}->{type} eq "air_conditioning") {
+			$message .= ";;";
+		} else {
+				$message .=  $d->{setting}->{mode}. ";";
+				$message .=  $d->{setting}->{fanSpeed}. ";";
+		}
+
+
 		Log3 $name, 4, "$name: trying to dispatch message: $message";
 		my $found = Dispatch($hash, $message);
 		Log3 $name, 4, "$name: tried to dispatch message. Result: $found";
@@ -1735,6 +1746,11 @@ sub Tado_UpdateZoneCallback($)
 		return undef;
 	}
 }
+
+
+
+
+
 
 sub Tado_UpdateAirComfortCallback($)
 {
@@ -1782,7 +1798,7 @@ sub Tado_UpdateAirComfortCallback($)
 
 
 		 $message .= $param->{temperatureLevel} . ";"
-			. $param->{humidityLevel} . ";"	
+			. $param->{humidityLevel} . ";"
 			. $param->{coordinate}->{radial} . ";"
 			. $param->{coordinate}->{angular} . ";";
 
@@ -2115,29 +2131,29 @@ sub tado_decrypt($)
     	<br><ul>
     		<li>Manages the communication towards the Tado cloud environment and documents the status in several readings like which data was refreshed, when it was rerefershed, etc.</li>
     		<li><b>Overall Presence status</b> Indicates wether at least one mobile device is 'at Home'</li>
-    		<li><b>Overall Air Comfort</b> Indicates the air comfort of the whole home.</li> 
+    		<li><b>Overall Air Comfort</b> Indicates the air comfort of the whole home.</li>
     	</ul></li>
     	<li>Zone (basically a room)
     	<br><ul>
     		<li><b>Temperature Management:</b> Displays the current temperature, allows to set the desired temperature including the Tado modes which can do this manually or automatically</li>
-    		<li><b>Zone Air Comfort</b> Indicates the air comfort of the specific room.</li> 
+    		<li><b>Zone Air Comfort</b> Indicates the air comfort of the specific room.</li>
     	</ul></li>
     	<li>Device
     	   <br><ul>
     		<li><b>Connection State:</b> Indicate when the actual device was seen the last time</li>
-    		<li><b>Battery Level</b> Indicates the current battery level of the device.</li> 
-       		<li><b>Find device</b> Output a 'Hi' message on the display to identify the specific device</li> 
+    		<li><b>Battery Level</b> Indicates the current battery level of the device.</li>
+       		<li><b>Find device</b> Output a 'Hi' message on the display to identify the specific device</li>
     	</ul></li>
     	<li>Mobile Device<
     	  <br><ul>
     		<li><b>Device Configration:</b> Displays information about the device type and the current configuration (view only)</li>
-    		<li><b>Presence status</b> Indicates if the specific mobile device is Home or Away.</li> 
+    		<li><b>Presence status</b> Indicates if the specific mobile device is Home or Away.</li>
     	</ul></li>
     	<li>Weather
     	  <br><ul>
     		<li>Displays information about the ouside waether and the solar intensity (cloud source, not actually measured).</li>
     	</ul></li>
-    </ul>	
+    </ul>
     <br>
     While previous versions of this plugin were using plain authentication encoding the username and the password directly in the URL this version now uses OAuth2 which does a secure authentication and uses security tokens afterwards. This is a huge security improvement. The implementation is based on code written by Philipp (Psycho160). Thanks for sharing.
     <br>
