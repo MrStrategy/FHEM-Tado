@@ -1985,13 +1985,13 @@ sub Tado_UpdatePresenceStatus($$)
 
 sub Tado_Write ($$)
 {
-	my ($hash,$code,$zoneID,$param1,$param2)= @_;
+	my ($hash,$code,$zoneID,$subType,@param)= @_;
 	my $name = $hash->{NAME};
 
 	if ($code eq 'Temp')
 	{
-		my $duration = $param1;
-		my $temperature = $param2;
+		my $duration = shift @param;
+		my $temperature = shift @param;
 
 		my $readTemplate = $url{"setZoneTemperature"};
 		my $homeID = ReadingsVal ($name,"HomeID",undef);
@@ -2000,7 +2000,14 @@ sub Tado_Write ($$)
 		$readTemplate =~ s/#ZoneID#/$zoneID/g;
 
 		my %message ;
-		$message{'setting'}{'type'} = "HEATING";
+
+
+		if (uc $subType eq "ZONE"){
+			#backwards compatibility for existing installations
+			$message{'setting'}{'type'} = "HEATING";
+		} else {
+			$message{'setting'}{'type'} = uc $subType;
+		}
 
 		if (defined $temperature){
 			if ($temperature eq "off") {
@@ -2023,13 +2030,20 @@ sub Tado_Write ($$)
 			$message{'termination'}{'durationInSeconds'} = $duration * 60;
 		}
 
+		if (uc $subType eq "AIR_CONDITIONING" && $message{'setting'}{'power'} eq 'ON' ){
+			$message{'setting'}{'mode'} = shift @param;
+			$message{'setting'}{'fanSpeed'} = shift @param;
+		}
+
 		my $d = Tado_httpSimpleOperationOAuth( $hash , $readTemplate, 'PUT',  encode_json \%message  );
 		return undef;
 	}
 
+
+
 	if ($code eq 'EarlyStart')
 	{
-		my $setting = $param1;
+		my $setting = shift @param;
 
 		my $readTemplate = $url{"earlyStart"};
 

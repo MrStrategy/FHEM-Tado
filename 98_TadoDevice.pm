@@ -357,11 +357,24 @@ sub TadoDevice_Set($@)
 
 
 	if ($opt eq "automatic")	{
-		IOWrite($hash, "Temp", InternalVal($name, "TadoId", undef) , "Auto");
+		IOWrite($hash, "Temp", InternalVal($name, "TadoId", undef), AttrVal($name, 'subType', 'zone') , "Auto");
 	} elsif ($opt eq "off")	{
-		IOWrite($hash, "Temp", InternalVal($name, "TadoId", undef), "0" , "off");
+		IOWrite($hash, "Temp", InternalVal($name, "TadoId", undef), AttrVal($name, 'subType', 'zone'), "0" , "off");
 	} elsif ($opt eq "sayHi")	{
-		IOWrite($hash, "Hi", InternalVal($name, "TadoId", undef));
+		IOWrite($hash, "Hi", InternalVal($name, "TadoId", undef), , AttrVal($name, 'subType', 'zone'));
+	} elsif ($opt eq "fanSpeed")	{
+		my $fan = shift @param;
+		if (not defined $fan) {return "Missing fan value. Please insert valid fan speed value."}
+		IOWrite($hash, "Temp", InternalVal($name, "TadoId", undef), AttrVal($name, 'subType', 'zone'), "0", ReadingsVal($name, 'desired-temp', 'off'), ReadingsVal($name, 'airconditioning_mode', 'cool'), $fan);
+	} elsif ($opt eq "mode")	{
+		my $mode = shift @param;
+		if (not defined $mode) {return "Missing 'mode' value. Please insert valid operating mode for the air conditioning."}
+		IOWrite($hash, "Temp", InternalVal($name, "TadoId", undef), AttrVal($name, 'subType', 'zone'), "0", ReadingsVal($name, 'desired-temp', 'off'), $mode, ReadingsVal($name, 'fanSpeed', 'low'));
+	} elsif ($opt eq "swing")	{
+		return "Function not yet implemented due to missing API information.";
+		my $swing = shift @param;
+		if (not defined $swing) {return "Missing 'swing' value. Please insert either 'ON' or 'OFF'."}
+		IOWrite($hash, "Temp", InternalVal($name, "TadoId", undef), AttrVal($name, 'subType', 'zone'), "0", $swing);
 	} else {
 
 		my $temperature = shift @param;
@@ -371,19 +384,19 @@ sub TadoDevice_Set($@)
 		if (not (looks_like_number($temperature) || $temperature eq 'off' )) {return "Invalid temperature value. Please insert numeric value or lower case string 'off'"}
 
 		if ($opt eq "temperature")	{
-			IOWrite($hash, "Temp", InternalVal($name, "TadoId", undef), "0" , $temperature);
+			IOWrite($hash, "Temp", InternalVal($name, "TadoId", undef), AttrVal($name, 'subType', 'zone'), "0" , $temperature);
 		} elsif ($opt eq "temperature-for-60")	{
-			IOWrite($hash, "Temp", InternalVal($name, "TadoId", undef), "60" , $temperature);
+			IOWrite($hash, "Temp", InternalVal($name, "TadoId", undef), AttrVal($name, 'subType', 'zone'), "60" , $temperature);
 		} elsif ($opt eq "temperature-for-90")	{
-			IOWrite($hash, "Temp", InternalVal($name, "TadoId", undef), "90" , $temperature);
+			IOWrite($hash, "Temp", InternalVal($name, "TadoId", undef), AttrVal($name, 'subType', 'zone'), "90" , $temperature);
 		} elsif ($opt eq "temperature-for-120")	{
-			IOWrite($hash, "Temp", InternalVal($name, "TadoId", undef), "120" , $temperature);
+			IOWrite($hash, "Temp", InternalVal($name, "TadoId", undef), AttrVal($name, 'subType', 'zone'), "120" , $temperature);
 		} elsif ($opt eq "temperature-for-180")	{
-			IOWrite($hash, "Temp", InternalVal($name, "TadoId", undef), "180" , $temperature);
+			IOWrite($hash, "Temp", InternalVal($name, "TadoId", undef), AttrVal($name, 'subType', 'zone'), "180" , $temperature);
 		} elsif ($opt eq "temperature-for-240")	{
-			IOWrite($hash, "Temp", InternalVal($name, "TadoId", undef), "240" , $temperature);
+			IOWrite($hash, "Temp", InternalVal($name, "TadoId", undef), AttrVal($name, 'subType', 'zone'), "240" , $temperature);
 		} elsif ($opt eq "temperature-for-300")	{
-			IOWrite($hash, "Temp", InternalVal($name, "TadoId", undef), "300" , $temperature);
+			IOWrite($hash, "Temp", InternalVal($name, "TadoId", undef), AttrVal($name, 'subType', 'zone'), "300" , $temperature);
 		}
 	}
 }
