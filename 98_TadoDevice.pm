@@ -189,8 +189,8 @@ sub TadoDevice_Parse ($$)
 			}
 
 
-			readingsBulkUpdate($hash, "fanSpeed", $values[27]) if( defined($values[27]) && !($values[27] eq ''));
-			readingsBulkUpdate($hash, "airconditioning_mode", $values[28]) if( defined($values[28]) && !($values[28] eq ''));
+			readingsBulkUpdate($hash, "airconditioning_mode", $values[27]) if( defined($values[27]) && !($values[27] eq ''));
+			readingsBulkUpdate($hash, "fanSpeed", $values[28]) if( defined($values[28]) && !($values[28] eq ''));
 
 			readingsEndUpdate($hash, 1);
 
