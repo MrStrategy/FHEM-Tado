@@ -22,7 +22,13 @@ off       	          => " ",
 my %TadoDevice_airconditioning_sets = (
 automatic             => ' ',
 off       	          => " ",
-'temperature'	          => " "
+'temperature'	          => " ",
+'temperature-for-60'	=> " ",
+'temperature-for-90'	=> " ",
+'temperature-for-120'	=> " ",
+'temperature-for-180'	=> " ",
+'temperature-for-240'	=> " ",
+'temperature-for-300'	=> " "
 );
 
 
@@ -384,19 +390,19 @@ sub TadoDevice_Set($@)
 		if (not (looks_like_number($temperature) || $temperature eq 'off' )) {return "Invalid temperature value. Please insert numeric value or lower case string 'off'"}
 
 		if ($opt eq "temperature")	{
-			IOWrite($hash, "Temp", InternalVal($name, "TadoId", undef), AttrVal($name, 'subType', 'zone'), "0" , $temperature);
+			IOWrite($hash, "Temp", InternalVal($name, "TadoId", undef), AttrVal($name, 'subType', 'zone'), "0" , $temperature, ReadingsVal($name, 'airconditioning_mode', 'cool'), ReadingsVal($name, 'fanSpeed', 'low'));
 		} elsif ($opt eq "temperature-for-60")	{
-			IOWrite($hash, "Temp", InternalVal($name, "TadoId", undef), AttrVal($name, 'subType', 'zone'), "60" , $temperature);
+			IOWrite($hash, "Temp", InternalVal($name, "TadoId", undef), AttrVal($name, 'subType', 'zone'), "60" , $temperature, ReadingsVal($name, 'airconditioning_mode', 'cool'), ReadingsVal($name, 'fanSpeed', 'low'));
 		} elsif ($opt eq "temperature-for-90")	{
-			IOWrite($hash, "Temp", InternalVal($name, "TadoId", undef), AttrVal($name, 'subType', 'zone'), "90" , $temperature);
+			IOWrite($hash, "Temp", InternalVal($name, "TadoId", undef), AttrVal($name, 'subType', 'zone'), "90" , $temperature, ReadingsVal($name, 'airconditioning_mode', 'cool'), ReadingsVal($name, 'fanSpeed', 'low'));
 		} elsif ($opt eq "temperature-for-120")	{
-			IOWrite($hash, "Temp", InternalVal($name, "TadoId", undef), AttrVal($name, 'subType', 'zone'), "120" , $temperature);
+			IOWrite($hash, "Temp", InternalVal($name, "TadoId", undef), AttrVal($name, 'subType', 'zone'), "120" , $temperature, ReadingsVal($name, 'airconditioning_mode', 'cool'), ReadingsVal($name, 'fanSpeed', 'low'));
 		} elsif ($opt eq "temperature-for-180")	{
-			IOWrite($hash, "Temp", InternalVal($name, "TadoId", undef), AttrVal($name, 'subType', 'zone'), "180" , $temperature);
+			IOWrite($hash, "Temp", InternalVal($name, "TadoId", undef), AttrVal($name, 'subType', 'zone'), "180" , $temperature, ReadingsVal($name, 'airconditioning_mode', 'cool'), ReadingsVal($name, 'fanSpeed', 'low'));
 		} elsif ($opt eq "temperature-for-240")	{
-			IOWrite($hash, "Temp", InternalVal($name, "TadoId", undef), AttrVal($name, 'subType', 'zone'), "240" , $temperature);
+			IOWrite($hash, "Temp", InternalVal($name, "TadoId", undef), AttrVal($name, 'subType', 'zone'), "240" , $temperature, ReadingsVal($name, 'airconditioning_mode', 'cool'), ReadingsVal($name, 'fanSpeed', 'low'));
 		} elsif ($opt eq "temperature-for-300")	{
-			IOWrite($hash, "Temp", InternalVal($name, "TadoId", undef), AttrVal($name, 'subType', 'zone'), "300" , $temperature);
+			IOWrite($hash, "Temp", InternalVal($name, "TadoId", undef), AttrVal($name, 'subType', 'zone'), "300" , $temperature, ReadingsVal($name, 'airconditioning_mode', 'cool'), ReadingsVal($name, 'fanSpeed', 'low'));
 		}
 	}
 }
