@@ -28,7 +28,10 @@ off       	          => " ",
 'temperature-for-120'	=> " ",
 'temperature-for-180'	=> " ",
 'temperature-for-240'	=> " ",
-'temperature-for-300'	=> " "
+'temperature-for-300'	=> " ",
+'fanSpeed'            => " ",
+'mode'                => " ",
+'swing'     	        => " ",
 );
 
 
@@ -479,12 +482,13 @@ sub TadoDevice_GenerateAirconditioningSchema()
 my $response = "";
 foreach my $item (keys %TadoDevice_airconditioning_sets){
 	if ($item =~ /^temperature/) {$response .= $item.":".$temperatureString." ";}
+  elsif($item eq 'fanSpeed'){$response.= "fanSpeed:auto,low,middle,high "}
+  elsif($item eq 'mode'){"mode:off,heat,cool,dry,fan,auto "}
+	elsif($item eq 'swing'){"swing:on,off "}
 	else {$response .= $item." ";}
  }
 
- $response.= "fanSpeed:auto,low,middle,high ";
- $response.= "mode:off,heat,cool,dry,fan,auto ";
- $response.= "swing:on,off ";
+
 
 return $response;
 }
