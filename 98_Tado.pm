@@ -1724,11 +1724,13 @@ sub Tado_UpdateZoneCallback($)
 		}
 
 		#aircondition-fanspeed
-		if ($d->{setting}->{power} eq "OFF" || !lc $d->{setting}->{type} eq "air_conditioning") {
+		if ($d->{setting}->{power} eq "OFF" ) { #|| !lc $d->{setting}->{type} eq "air_conditioning") {
 			$message .= ";;";
 		} else {
-				$message .=  $d->{setting}->{mode}. ";";
-				$message .=  $d->{setting}->{fanSpeed}. ";";
+				#$message .=  $d->{setting}->{mode}. ";";
+				#$message .=  $d->{setting}->{fanSpeed}. ";";
+				$message .=  "COOL;";
+				$message .=  "MIDDLE;";
 		}
 
 
@@ -2031,8 +2033,8 @@ sub Tado_Write ($$)
 		}
 
 		if (uc $subType eq "AIR_CONDITIONING" && $message{'setting'}{'power'} eq 'ON' ){
-			$message{'setting'}{'mode'} = shift @param;
-			$message{'setting'}{'fanSpeed'} = shift @param;
+			$message{'setting'}{'mode'} = uc shift @param;
+			$message{'setting'}{'fanSpeed'} = uc shift @param;
 		}
 
 		my $d = Tado_httpSimpleOperationOAuth( $hash , $readTemplate, 'PUT',  encode_json \%message  );

@@ -455,6 +455,7 @@ sub TadoDevice_Attr(@)
 
 sub TadoDevice_GenerateTemperatureSchema()
 {
+
 	my $valueString = "off";
   for (my $i=5;$i<=25;$i+=0.5){
 	  $valueString .= ",$i"
