@@ -1432,7 +1432,7 @@ sub Tado_RequestDeviceUpdate($)
 	my $isEnabled = AttrVal($name, 'generateDevices', 'yes');
 	if ($isEnabled eq 'no') {
 		my $msg = "Attribute 'generateDevices' is set to no. No update will be executed.";
-		Log3 'Tado', 3, $msg;
+		Log3 'Tado', 4, $msg;
 		return undef;
 	}
 
@@ -1532,7 +1532,7 @@ sub Tado_RequestMobileDeviceUpdate($)
 	my $isEnabled = AttrVal($name, 'generateMobileDevices', 'yes');
 	if ($isEnabled eq 'no') {
 		my $msg = "Attribute 'generateMobileDevices' is set to no. No update will be executed.";
-		Log3 'Tado', 3, $msg;
+		Log3 'Tado', 4, $msg;
 		return undef;
 	}
 
@@ -1729,8 +1729,8 @@ sub Tado_UpdateZoneCallback($)
 		} else {
 				#$message .=  $d->{setting}->{mode}. ";";
 				#$message .=  $d->{setting}->{fanSpeed}. ";";
-				$message .=  "COOL;";
-				$message .=  "MIDDLE;";
+				$message .=  "OFF;";
+				$message .=  "OFF;";
 		}
 
 
