@@ -1727,10 +1727,10 @@ sub Tado_UpdateZoneCallback($)
 		if ($d->{setting}->{power} eq "OFF" ) { #|| !lc $d->{setting}->{type} eq "air_conditioning") {
 			$message .= ";;";
 		} else {
-				#$message .=  $d->{setting}->{mode}. ";";
-				#$message .=  $d->{setting}->{fanSpeed}. ";";
-				$message .=  "OFF;";
-				$message .=  "OFF;";
+				$message .=  $d->{setting}->{mode}. ";";
+				$message .=  $d->{setting}->{fanSpeed}. ";";
+				#$message .=  "OFF;";
+				#$message .=  "OFF;";
 		}
 
 
@@ -2036,7 +2036,7 @@ sub Tado_Write ($$)
 			$message{'setting'}{'mode'} = uc shift @param;
 			$message{'setting'}{'fanSpeed'} = uc shift @param;
 			#No temperature allowed if mode is AUTO
-			if ($message{'setting'}{'mode'} eq 'AUTO') {
+			if ($message{'setting'}{'mode'} eq 'AUTO' | $message{'setting'}{'mode'} eq 'DRY' | $message{'setting'}{'mode'} eq 'FAN' ) {
 				delete($message{'setting'}{'temperature'});
 			}
 
