@@ -197,9 +197,13 @@ sub TadoDevice_Parse ($$)
 				readingsDelete($hash, "overlay-termination-remainingTimeInSeconds");
 			}
 
-
 			readingsBulkUpdate($hash, "airconditioning_mode", $values[27]) if( defined($values[27]) && !($values[27] eq ''));
 			readingsBulkUpdate($hash, "fanSpeed", $values[28]) if( defined($values[28]) && !($values[28] eq ''));
+
+			if ($values[8] eq 'OFF' && AttrVal($name, 'subType', 'nix') eq 'air_conditioning') {
+				readingsBulkUpdate($hash, "airconditioning_mode", "OFF");
+				readingsBulkUpdate($hash, "fanSpeed", "OFF");
+			}
 
 			readingsEndUpdate($hash, 1);
 
@@ -220,9 +224,9 @@ sub TadoDevice_Parse ($$)
 					   readingsSingleUpdate($hash, 'state', sprintf("T: %.1f &deg;C desired: off H: %.1f%%", $values[3],  $values[9]), 1);
 				  	} else {
 					   if ($values[3] ne '') {
-						 readingsSingleUpdate($hash, 'state', sprintf("T: %.1f &deg;C desired: off", $values[3]), 1);
+						    readingsSingleUpdate($hash, 'state', sprintf("T: %.1f &deg;C desired: off", $values[3]), 1);
 					   } else {
-                                                 readingsSingleUpdate($hash, 'state', "desired: off", 1);
+                readingsSingleUpdate($hash, 'state', "desired: off", 1);
 					   }
 					}
 				}
@@ -270,7 +274,7 @@ sub TadoDevice_Parse ($$)
       if ($values[3] eq '0') {
 				readingsBulkUpdate($hash, 'state', sprintf("Tracking: OFF"), 1);
 			} else {
-					readingsBulkUpdate($hash, 'state', "Tracking: ON Home: ". defined $values[5] ? $values[5] : 'undef', 1);
+				readingsBulkUpdate($hash, 'state', "Tracking: ON Home: ". defined $values[5] ? $values[5] : 'undef', 1);
 			}
 
 
@@ -392,20 +396,29 @@ sub TadoDevice_Set($@)
 		if (not defined $temperature) {return "Missing temperature value. Please insert numeric value or lower case string 'off'"}
 		if (not (looks_like_number($temperature) || $temperature eq 'off' )) {return "Invalid temperature value. Please insert numeric value or lower case string 'off'"}
 
+    my $airco_mode = '';
+		my $airco_fan = '';
+
+    if (AttrVal($name, 'subType', 'nix') eq 'air_conditioning'){
+			$airco_mode = ReadingsVal($name, 'airconditioning_mode', 'OFF') eq 'OFF' ? 'AUTO' : ReadingsVal($name, 'airconditioning_mode', 'OFF');
+			$airco_fan = ReadingsVal($name, 'fanSpeed', 'OFF') eq 'OFF' ? 'AUTO' : ReadingsVal($name, 'fanSpeed', 'OFF');
+		}
+
+
 		if ($opt eq "temperature")	{
-			IOWrite($hash, "Temp", InternalVal($name, "TadoId", undef), AttrVal($name, 'subType', 'zone'), "0" , $temperature, ReadingsVal($name, 'airconditioning_mode', 'cool'), ReadingsVal($name, 'fanSpeed', 'low'));
+			IOWrite($hash, "Temp", InternalVal($name, "TadoId", undef), AttrVal($name, 'subType', 'zone'), "0" , $temperature, $airco_mode, $airco_fan);
 		} elsif ($opt eq "temperature-for-60")	{
-			IOWrite($hash, "Temp", InternalVal($name, "TadoId", undef), AttrVal($name, 'subType', 'zone'), "60" , $temperature, ReadingsVal($name, 'airconditioning_mode', 'cool'), ReadingsVal($name, 'fanSpeed', 'low'));
+			IOWrite($hash, "Temp", InternalVal($name, "TadoId", undef), AttrVal($name, 'subType', 'zone'), "60" , $temperature, $airco_mode, $airco_fan);
 		} elsif ($opt eq "temperature-for-90")	{
-			IOWrite($hash, "Temp", InternalVal($name, "TadoId", undef), AttrVal($name, 'subType', 'zone'), "90" , $temperature, ReadingsVal($name, 'airconditioning_mode', 'cool'), ReadingsVal($name, 'fanSpeed', 'low'));
+			IOWrite($hash, "Temp", InternalVal($name, "TadoId", undef), AttrVal($name, 'subType', 'zone'), "90" , $temperature, $airco_mode, $airco_fan);
 		} elsif ($opt eq "temperature-for-120")	{
-			IOWrite($hash, "Temp", InternalVal($name, "TadoId", undef), AttrVal($name, 'subType', 'zone'), "120" , $temperature, ReadingsVal($name, 'airconditioning_mode', 'cool'), ReadingsVal($name, 'fanSpeed', 'low'));
+			IOWrite($hash, "Temp", InternalVal($name, "TadoId", undef), AttrVal($name, 'subType', 'zone'), "120" , $temperature, $airco_mode, $airco_fan);
 		} elsif ($opt eq "temperature-for-180")	{
-			IOWrite($hash, "Temp", InternalVal($name, "TadoId", undef), AttrVal($name, 'subType', 'zone'), "180" , $temperature, ReadingsVal($name, 'airconditioning_mode', 'cool'), ReadingsVal($name, 'fanSpeed', 'low'));
+			IOWrite($hash, "Temp", InternalVal($name, "TadoId", undef), AttrVal($name, 'subType', 'zone'), "180" , $temperature, $airco_mode, $airco_fan);
 		} elsif ($opt eq "temperature-for-240")	{
-			IOWrite($hash, "Temp", InternalVal($name, "TadoId", undef), AttrVal($name, 'subType', 'zone'), "240" , $temperature, ReadingsVal($name, 'airconditioning_mode', 'cool'), ReadingsVal($name, 'fanSpeed', 'low'));
+			IOWrite($hash, "Temp", InternalVal($name, "TadoId", undef), AttrVal($name, 'subType', 'zone'), "240" , $temperature, $airco_mode, $airco_fan);
 		} elsif ($opt eq "temperature-for-300")	{
-			IOWrite($hash, "Temp", InternalVal($name, "TadoId", undef), AttrVal($name, 'subType', 'zone'), "300" , $temperature, ReadingsVal($name, 'airconditioning_mode', 'cool'), ReadingsVal($name, 'fanSpeed', 'low'));
+			IOWrite($hash, "Temp", InternalVal($name, "TadoId", undef), AttrVal($name, 'subType', 'zone'), "300" , $temperature, $airco_mode, $airco_fan);
 		}
 	}
 }
@@ -484,8 +497,8 @@ my $response = "";
 foreach my $item (keys %TadoDevice_airconditioning_sets){
 	if ($item =~ /^temperature/) {$response .= $item.":".$temperatureString." ";}
   elsif($item eq 'fanSpeed'){$response.= "fanSpeed:auto,low,middle,high "}
-  elsif($item eq 'mode'){"mode:off,heat,cool,dry,fan,auto "}
-	elsif($item eq 'swing'){"swing:on,off "}
+  elsif($item eq 'mode'){$response.= "mode:off,heat,cool,dry,fan,auto "}
+	elsif($item eq 'swing'){$response.= "swing:on,off "}
 	else {$response .= $item." ";}
  }
 
