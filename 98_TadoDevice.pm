@@ -378,11 +378,13 @@ sub TadoDevice_Set($@)
 	} elsif ($opt eq "fanSpeed")	{
 		my $fan = shift @param;
 		if (not defined $fan) {return "Missing fan value. Please insert valid fan speed value."}
-		IOWrite($hash, "Temp", InternalVal($name, "TadoId", undef), AttrVal($name, 'subType', 'zone'), "0", ReadingsVal($name, 'desired-temp', 'off'), ReadingsVal($name, 'airconditioning_mode', 'cool'), $fan);
+		my $airco_mode = ReadingsVal($name, 'airconditioning_mode', 'OFF') eq 'OFF' ? 'COOL' : ReadingsVal($name, 'airconditioning_mode', 'OFF');
+		IOWrite($hash, "Temp", InternalVal($name, "TadoId", undef), AttrVal($name, 'subType', 'zone'), "0", ReadingsVal($name, 'desired-temp', 'off'), $airco_mode, $fan);
 	} elsif ($opt eq "mode")	{
 		my $mode = shift @param;
 		if (not defined $mode) {return "Missing 'mode' value. Please insert valid operating mode for the air conditioning."}
-		IOWrite($hash, "Temp", InternalVal($name, "TadoId", undef), AttrVal($name, 'subType', 'zone'), "0", ReadingsVal($name, 'desired-temp', 'off'), $mode, ReadingsVal($name, 'fanSpeed', 'low'));
+		my $airco_fan = ReadingsVal($name, 'fanSpeed', 'OFF') eq 'OFF' ? 'AUTO' : ReadingsVal($name, 'fanSpeed', 'OFF');
+		IOWrite($hash, "Temp", InternalVal($name, "TadoId", undef), AttrVal($name, 'subType', 'zone'), "0", ReadingsVal($name, 'desired-temp', 'off'), $mode, $airco_fan);
 	} elsif ($opt eq "swing")	{
 		return "Function not yet implemented due to missing API information.";
 		my $swing = shift @param;
@@ -400,7 +402,7 @@ sub TadoDevice_Set($@)
 		my $airco_fan = '';
 
     if (AttrVal($name, 'subType', 'nix') eq 'air_conditioning'){
-			$airco_mode = ReadingsVal($name, 'airconditioning_mode', 'OFF') eq 'OFF' ? 'AUTO' : ReadingsVal($name, 'airconditioning_mode', 'OFF');
+			$airco_mode = ReadingsVal($name, 'airconditioning_mode', 'OFF') eq 'OFF' ? 'COOL' : ReadingsVal($name, 'airconditioning_mode', 'OFF');
 			$airco_fan = ReadingsVal($name, 'fanSpeed', 'OFF') eq 'OFF' ? 'AUTO' : ReadingsVal($name, 'fanSpeed', 'OFF');
 		}
 

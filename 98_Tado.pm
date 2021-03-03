@@ -2035,6 +2035,11 @@ sub Tado_Write ($$)
 		if (uc $subType eq "AIR_CONDITIONING" && $message{'setting'}{'power'} eq 'ON' ){
 			$message{'setting'}{'mode'} = uc shift @param;
 			$message{'setting'}{'fanSpeed'} = uc shift @param;
+			#No temperature allowed if mode is AUTO
+			if ($message{'setting'}{'mode'} eq 'AUTO') {
+				delete($message{'setting'}{'temperature'});
+			}
+
 		}
 
 		my $d = Tado_httpSimpleOperationOAuth( $hash , $readTemplate, 'PUT',  encode_json \%message  );
