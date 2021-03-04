@@ -1724,11 +1724,11 @@ sub Tado_UpdateZoneCallback($)
 		}
 
 		#aircondition-fanspeed
-		if ($d->{setting}->{power} eq "OFF" ) { #|| !lc $d->{setting}->{type} eq "air_conditioning") {
+		if ($d->{setting}->{power} eq "OFF"  || !lc $d->{setting}->{type} eq "air_conditioning" ) {
 			$message .= ";;";
 		} else {
+			  $message .=  $d->{setting}->{fanSpeed}. ";";
 				$message .=  $d->{setting}->{mode}. ";";
-				$message .=  $d->{setting}->{fanSpeed}. ";";
 				#$message .=  "OFF;";
 				#$message .=  "OFF;";
 		}
