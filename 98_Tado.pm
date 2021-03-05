@@ -1727,10 +1727,15 @@ sub Tado_UpdateZoneCallback($)
 		if ($d->{setting}->{power} eq "OFF"  || !lc $d->{setting}->{type} eq "air_conditioning" ) {
 			$message .= ";;";
 		} else {
+			  Log3 $name, 1, "Tado_UpdateZoneCallback: sending 'FanSpeed' value: " . $d->{setting}->{fanSpeed};
 			  $message .=  $d->{setting}->{fanSpeed}. ";";
+        Log3 $name, 1, "Tado_UpdateZoneCallback: sending 'Mode' value: " . $d->{setting}->{mode};
 				$message .=  $d->{setting}->{mode}. ";";
-				#$message .=  "OFF;";
-				#$message .=  "OFF;";
+
+				#Log3 $name, 1, "Tado_UpdateZoneCallback: sending 'FanSpeed' value: " . "FanSpeed";
+				#$message .=  "FanSpeed;";
+				#Log3 $name, 1, "Tado_UpdateZoneCallback: sending 'Mode' value: " . "Mode";
+				#$message .=  "Mode;";
 		}
 
 
