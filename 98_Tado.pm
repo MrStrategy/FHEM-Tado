@@ -1720,16 +1720,18 @@ sub Tado_UpdateZoneCallback($)
 
 		# No overlay active - all values null
 		} else {
-				$message .= ";;;;;;;"
+				$message .= ";;;;;;;;"
 		}
 
+
 		#aircondition-fanspeed
-		if ($d->{setting}->{power} eq "OFF"  || !lc $d->{setting}->{type} eq "air_conditioning" ) {
+		if ( uc $d->{setting}->{power} eq "OFF"  || uc $d->{setting}->{type} ne 'AIR_CONDITIONING' ) {
+			Log3 $name, 5, "Tado_UpdateZoneCallback: Not an AirCondition or OFF";
 			$message .= ";;";
 		} else {
-			  Log3 $name, 1, "Tado_UpdateZoneCallback: sending 'FanSpeed' value: " . $d->{setting}->{fanSpeed};
+			  Log3 $name, 5, "Tado_UpdateZoneCallback: sending 'FanSpeed' value: " . $d->{setting}->{fanSpeed};
 			  $message .=  $d->{setting}->{fanSpeed}. ";";
-        Log3 $name, 1, "Tado_UpdateZoneCallback: sending 'Mode' value: " . $d->{setting}->{mode};
+        Log3 $name, 5, "Tado_UpdateZoneCallback: sending 'Mode' value: " . $d->{setting}->{mode};
 				$message .=  $d->{setting}->{mode}. ";";
 
 				#Log3 $name, 1, "Tado_UpdateZoneCallback: sending 'FanSpeed' value: " . "FanSpeed";

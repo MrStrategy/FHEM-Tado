@@ -197,15 +197,13 @@ sub TadoDevice_Parse ($$)
 				readingsDelete($hash, "overlay-termination-remainingTimeInSeconds");
 			}
 
-      Log3 $name, 1, "TadoDevice_Parse: Reading aircondition parameters.";
+      Log3 $name, 5, "TadoDevice_Parse: Parameter 27 containing 'fanSpeed' has value: " . $values[27];
+			readingsBulkUpdate($hash, "fanSpeed", $values[27]) if( defined($values[27]) && !($values[27] eq ''));
 
-      Log3 $name, 1, "TadoDevice_Parse: Parameter 27 containing 'airconditioning_mode' has value: " . $values[27];
-			readingsBulkUpdate($hash, "airconditioning_mode", $values[27]) if( defined($values[27]) && !($values[27] eq ''));
+      Log3 $name, 5, "TadoDevice_Parse: Parameter 28 containing 'airconditioning_mode' has value: " . $values[28];
+			readingsBulkUpdate($hash, "airconditioning_mode", $values[28]) if( defined($values[28]) && !($values[28] eq ''));
 
-      Log3 $name, 1, "TadoDevice_Parse: Parameter 28 containing 'fanSpeed' has value: " . $values[28];
-			readingsBulkUpdate($hash, "fanSpeed", $values[28]) if( defined($values[28]) && !($values[28] eq ''));
-
-			if ($values[8] eq 'OFF' && AttrVal($name, 'subType', 'nix') eq 'air_conditioning') {
+			if ($values[8] eq 'OFF' && lc AttrVal($name, 'subType', 'nix') eq 'air_conditioning') {
 				readingsBulkUpdate($hash, "airconditioning_mode", "OFF");
 				readingsBulkUpdate($hash, "fanSpeed", "OFF");
 			}
