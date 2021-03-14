@@ -2033,6 +2033,8 @@ sub Tado_Write ($$)
 		} elsif ($duration eq 'Auto') {
 			Log3 $name, 4, 'Return to automatic mode';
 			my $d = Tado_httpSimpleOperationOAuth( $hash , $readTemplate, 'DELETE'  );
+			Tado_RequestZoneUpdate($hash);
+			Tado_RequestAirComfortUpdate($hash);
 			return undef;
 		} else {
 			$message{'termination'}{'type'}  = 'TIMER';
@@ -2046,10 +2048,15 @@ sub Tado_Write ($$)
 			if ($message{'setting'}{'mode'} eq 'AUTO' | $message{'setting'}{'mode'} eq 'DRY' | $message{'setting'}{'mode'} eq 'FAN' ) {
 				delete($message{'setting'}{'temperature'});
 			}
+			if ($message{'setting'}{'mode'} eq 'DRY'){
+				delete($message{'setting'}{'fanSpeed'});
+			}
 
 		}
 
 		my $d = Tado_httpSimpleOperationOAuth( $hash , $readTemplate, 'PUT',  encode_json \%message  );
+		Tado_RequestZoneUpdate($hash);
+		Tado_RequestAirComfortUpdate($hash);
 		return undef;
 	}
 
