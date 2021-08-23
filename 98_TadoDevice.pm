@@ -30,7 +30,10 @@ off       	          => " ",
 'temperature-for-240'	=> " ",
 'temperature-for-300'	=> " ",
 'fanSpeed'            => " ",
-'mode'                => " ",
+'fan'                => " ",
+'heat'                => " ",
+'cool'                => " ",
+'dry'                => " ",
 'swing'     	        => " ",
 );
 
@@ -361,8 +364,12 @@ sub TadoDevice_Set($@)
 		}
 	} elsif (AttrVal($name, 'subType', 'nix') eq 'air_conditioning') {
 		if(!defined($TadoDevice_airconditioning_sets{$opt})) {
-			my $validValues = TadoDevice_GenerateAirconditioningSchema();
+			my $validValues = TadoDevice_GenerateAirconditioningSchema2();
 			return "Unknown argument $opt, choose one of " . $validValues; #join(" ", @cList);
+		}
+		if (index($opt, 'temperature') != -1) {
+			my %allowedModes = map { $_ => 1 } split(' ', 'cool heat off');
+			if ( !exists($allowedModes{ReadingsVal($name, 'airconditioning_mode', 'OFF')})) {return "Temperature can only be set in modes cool, heat and off."}
 		}
 	} else  {
 		if(!defined($TadoDevice_thermostat_sets{$opt})) {
@@ -381,15 +388,41 @@ sub TadoDevice_Set($@)
 	} elsif ($opt eq "fanSpeed")	{
 		my $fan = shift @param;
 		if (not defined $fan) {return "Missing fan value. Please insert valid fan speed value."}
+		my %allowedModes = map { $_ => 1 } split(' ', 'cool heat off');
+		if ( !exists($allowedModes{ReadingsVal($name, 'airconditioning_mode', 'OFF')})) {return "Fanspeed can only be set in modes cool, heat and off."}
 		my $airco_mode = ReadingsVal($name, 'airconditioning_mode', 'OFF') eq 'OFF' ? 'COOL' : ReadingsVal($name, 'airconditioning_mode', 'OFF');
-	  my $temp = uc ReadingsVal($name, 'desired-temp', 'off') eq "OFF" ? 20 : ReadingsVal($name, 'desired-temp', 'off');
+	    my $temp = uc ReadingsVal($name, 'desired-temp', 'off') eq "OFF" ? 20 : ReadingsVal($name, 'desired-temp', 'off');
 		IOWrite($hash, "Temp", InternalVal($name, "TadoId", undef), AttrVal($name, 'subType', 'zone'), "0", $temp, $airco_mode, $fan);
+
+
 	} elsif ($opt eq "mode")	{
 		my $mode = shift @param;
 		if (not defined $mode) {return "Missing 'mode' value. Please insert valid operating mode for the air conditioning."}
 		my $temp = uc ReadingsVal($name, 'desired-temp', 'off') eq "OFF" ? 20 : ReadingsVal($name, 'desired-temp', 'off');
 		my $airco_fan = ReadingsVal($name, 'fanSpeed', 'OFF') eq 'OFF' ? 'AUTO' : ReadingsVal($name, 'fanSpeed', 'OFF');
 		IOWrite($hash, "Temp", InternalVal($name, "TadoId", undef), AttrVal($name, 'subType', 'zone'), "0", $temp, $mode, $airco_fan);
+
+	} elsif ($opt eq "cool")	{
+		my $temperature = shift @param;
+		my $airco_fan = ReadingsVal($name, 'fanSpeed', 'OFF') eq 'OFF' ? 'AUTO' : ReadingsVal($name, 'fanSpeed', 'OFF');
+		IOWrite($hash, "Temp", InternalVal($name, "TadoId", undef), AttrVal($name, 'subType', 'zone'), "0", $temperature, 'cool', $airco_fan);	
+		ReadingsVal($name, 'desired-temp', 'off');
+		readingsSingleUpdate($hash, 'desired-temp', $temperature , 1);
+
+	} elsif ($opt eq "heat")	{
+		my $temperature = shift @param;
+		my $airco_fan = ReadingsVal($name, 'fanSpeed', 'OFF') eq 'OFF' ? 'AUTO' : ReadingsVal($name, 'fanSpeed', 'OFF');
+		IOWrite($hash, "Temp", InternalVal($name, "TadoId", undef), AttrVal($name, 'subType', 'zone'), "0", $temperature, 'heat', $airco_fan);	
+		ReadingsVal($name, 'desired-temp', 'off');
+		readingsSingleUpdate($hash, 'desired-temp', $temperature , 1);
+
+	} elsif ($opt eq "dry")	{
+		IOWrite($hash, "Temp", InternalVal($name, "TadoId", undef), AttrVal($name, 'subType', 'zone'), "0", 0, 'dry', 'N/A');	
+
+	} elsif ($opt eq "fan")	{
+		IOWrite($hash, "Temp", InternalVal($name, "TadoId", undef), AttrVal($name, 'subType', 'zone'), "0", 0, 'fan', 'N/A');	
+
+
 	} elsif ($opt eq "swing")	{
 		return "Function not yet implemented due to missing API information.";
 		my $swing = shift @param;
@@ -398,8 +431,6 @@ sub TadoDevice_Set($@)
 	} else {
 
 		my $temperature = shift @param;
-
-
 		if (not defined $temperature) {return "Missing temperature value. Please insert numeric value or lower case string 'off'"}
 		if (not (looks_like_number($temperature) || $temperature eq 'off' )) {return "Invalid temperature value. Please insert numeric value or lower case string 'off'"}
 
@@ -495,26 +526,42 @@ sub TadoDevice_GenerateAirconditioningSchema()
 {
 	# temperature options
 	my $temperatureString = "off";
-  for (my $i=5;$i<=25;$i+=0.5){
-	  $temperatureString .= ",$i"
-  }
-
-
-my $response = "";
-foreach my $item (keys %TadoDevice_airconditioning_sets){
-	if ($item =~ /^temperature/) {$response .= $item.":".$temperatureString." ";}
-  elsif($item eq 'fanSpeed'){$response.= "fanSpeed:auto,low,middle,high "}
-  elsif($item eq 'mode'){$response.= "mode:off,heat,cool,dry,fan,auto "}
-	elsif($item eq 'swing'){$response.= "swing:on,off "}
-	else {$response .= $item." ";}
+  	for (my $i=5;$i<=25;$i+=0.5){
+		$temperatureString .= ",$i"
+  	}
+	my $response = "";
+	foreach my $item (keys %TadoDevice_airconditioning_sets)
+	{
+		if ($item =~ /^temperature/) {$response .= $item.":".$temperatureString." ";}
+  		elsif($item eq 'fanSpeed'){$response.= "fanSpeed:auto,low,middle,high "}
+  		elsif($item eq 'mode'){$response.= "mode:off,heat,cool,dry,fan,auto "}
+		elsif($item eq 'swing'){$response.= "swing:on,off "}
+		else {$response .= $item." ";}
+ 	}
  }
 
-
+sub TadoDevice_GenerateAirconditioningSchema2()
+{
+	# temperature options
+	my $temperatureString = "5";
+  	for (my $i=5.5;$i<=25;$i+=0.5){
+		$temperatureString .= ",$i"
+  	}
+	my $response = "";
+	foreach my $item (keys %TadoDevice_airconditioning_sets)
+	{
+		if ($item =~ /^temperature/) {$response .= $item.":".$temperatureString." ";}
+  		elsif($item eq 'fanSpeed'){$response.= "fanSpeed:auto,low,middle,high "}
+  		elsif($item eq 'fan'){$response.= "fan:noArg "}
+  		elsif($item eq 'heat'){$response.= "heat:".$temperatureString." "}
+		elsif($item eq 'cool'){$response.= "cool:".$temperatureString." "}
+		elsif($item eq 'dry'){$response.= "dry:noArg "}
+		elsif($item eq 'swing'){$response.= "swing:on,off "}
+		else {$response .= $item." ";}
+ 	}
 
 return $response;
 }
-
-
 
 1;
 

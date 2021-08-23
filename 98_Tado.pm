@@ -2047,11 +2047,8 @@ sub Tado_Write ($$)
 			#No temperature allowed if mode is AUTO
 			if ($message{'setting'}{'mode'} eq 'AUTO' | $message{'setting'}{'mode'} eq 'DRY' | $message{'setting'}{'mode'} eq 'FAN' ) {
 				delete($message{'setting'}{'temperature'});
-			}
-			if ($message{'setting'}{'mode'} eq 'DRY'){
 				delete($message{'setting'}{'fanSpeed'});
 			}
-
 		}
 
 		my $d = Tado_httpSimpleOperationOAuth( $hash , $readTemplate, 'PUT',  encode_json \%message  );
