@@ -1,7 +1,41 @@
-package main;
+package FHEM::TadoDevice;
+
 use strict;
 use warnings;
 use Scalar::Util qw(looks_like_number);
+use GPUtils qw(GP_Import GP_Export);
+
+## Import der FHEM Funktionen
+#-- Run before package compilation
+BEGIN {
+    # Import from main context
+    GP_Import(
+        qw(
+          Log3
+					Log
+					readingFnAttributes
+          readingsBeginUpdate
+          readingsEndUpdate
+          readingsBulkUpdate
+          readingsSingleUpdate
+          readingsDelete
+          InternalVal
+					AssignIoPort
+					AttrVal
+          defs
+					modules
+          )
+    );
+}
+
+#-- Export to main context with different name
+GP_Export(
+    qw(
+      Initialize
+      )
+);
+
+
 
 my %TadoDevice_gets = (
 update	=> " "
@@ -28,17 +62,17 @@ sayHi  => ' '
 
 
 
-sub TadoDevice_Initialize($)
+sub Initialize($)
 {
 	my ($hash) = @_;
 
-	$hash->{ParseFn}    = 'TadoDevice_Parse';
-	$hash->{DefFn}      = 'TadoDevice_Define';
-	$hash->{UndefFn}    = 'TadoDevice_Undef';
-	$hash->{SetFn}      = 'TadoDevice_Set';
-	$hash->{GetFn}      = 'TadoDevice_Get';
-	$hash->{AttrFn}     = 'TadoDevice_Attr';
-	$hash->{ReadFn}     = 'TadoDevice_Read';
+	$hash->{ParseFn}    = \&TadoDevice_Parse;
+	$hash->{DefFn}      = \&TadoDevice_Define;
+	$hash->{UndefFn}    = \&TadoDevice_Undef;
+	$hash->{SetFn}      = \&TadoDevice_Set;
+	$hash->{GetFn}      = \&TadoDevice_Get;
+	$hash->{AttrFn}     = \&TadoDevice_Attr;
+	$hash->{ReadFn}     = \&TadoDevice_Read;
 	$hash->{AttrList} =
 	'earlyStart:true,false '
 	. 'subType:zone,bridge,thermostat,weather,mobile_device '
@@ -117,14 +151,14 @@ sub TadoDevice_Parse ($$)
 {
 	my ( $io_hash, $message) = @_;
 
-	Log3 'TadoDevice', 5, "TadoDevice_Parse: Dispatched message arrived in TadoDevice Device";
+	Log3 "TadoDevice", 5, "TadoDevice_Parse: Dispatched message arrived in TadoDevice Device";
 
 
 	my @values = split(';', $message);
-	Log3 'TadoDevice', 5, "TadoDevice_Parse: Message was split, message is: " . join(", ", @values);
+	Log3 "TadoDevice", 5, "TadoDevice_Parse: Message was split, message is: " . join(", ", @values);
 
 	my $code = $io_hash->{NAME} . "-" . $values[1];
-	Log3 'TadoDevice', 5, "TadoDevice_Parse: Device Code is: " . $code;
+	Log3 "TadoDevice", 5, "TadoDevice_Parse: Device Code is: " . $code;
 
 	if(my $hash = $modules{TadoDevice}{defptr}{$code})
 	{
@@ -282,9 +316,29 @@ sub TadoDevice_Parse ($$)
 	}
 	else
 	{
-		Log3 'TadoDevice', 2, "TadoDevice: No device entry found for code $code. Tried to process message: $message";
+		Log3 "TadoDevice", 2, "TadoDevice: No device entry found for code $code. Tried to process message: $message";
 		return "UNDEFINED. Please define TadoDevice for tado ID $values[0]";
 	}
+}
+
+
+sub Processing_MessageTemperature {
+    my $hash         = shift;
+    my $decoded_json = shift;
+
+    my $name = $hash->{NAME};
+    readingsBeginUpdate($hash);
+    readingsBulkUpdate( $hash, 'session_energy', 'N/A' );
+    readingsBulkUpdate( $hash, 'session_start', 'N/A' );
+    readingsBulkUpdate( $hash, 'session_end', 'N/A' );
+    readingsBulkUpdate( $hash, 'session_chargeDurationInSeconds', 'N/A' );
+    readingsBulkUpdate( $hash, 'session_firstEnergyTransfer', 'N/A' );
+    readingsBulkUpdate( $hash, 'session_lastEnergyTransfer', 'N/A' );
+    readingsBulkUpdate( $hash, 'session_pricePerKWH', 'N/A' );
+    readingsBulkUpdate( $hash, 'session_chargingCost', 'N/A' );
+    readingsBulkUpdate( $hash, 'session_id', 'N/A' );
+    readingsEndUpdate( $hash, 1 );
+    return;
 }
 
 
