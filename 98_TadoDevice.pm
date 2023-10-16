@@ -12,18 +12,21 @@ BEGIN {
     GP_Import(
         qw(
           Log3
-					Log
-					readingFnAttributes
+		  Log
+		  readingFnAttributes
           readingsBeginUpdate
           readingsEndUpdate
           readingsBulkUpdate
           readingsSingleUpdate
           readingsDelete
+          ReadingsVal
           InternalVal
-					AssignIoPort
-					AttrVal
+		  AssignIoPort
+		  CommandAttr
+		  AttrVal
           defs
-					modules
+		  modules
+		  IOWrite
           )
     );
 }
@@ -76,6 +79,16 @@ sub Initialize($)
 	$hash->{AttrList} =
 	'earlyStart:true,false '
 	. 'subType:zone,bridge,thermostat,weather,mobile_device '
+	. 'geoTrackingEnabled:true,false '
+	. 'pushNotification_LowBatteryReminder:true,false '
+	. 'pushNotification_awayModeReminder:true,false '
+	. 'pushNotification_energySavingsReportReminder:true,false '
+	. 'pushNotification_homeModeReminder:true,false '
+	. 'pushNotification_openWindowReminder:true,false '
+	. 'onDemandLogRetrievalEnabled:true,false '
+	. 'specialOffersEnabled:true,false '
+	. 'pushNotification_energyIqReminder:true,false '
+	. 'pushNotification_incidentDetection:true,false '
 	. $readingFnAttributes;
 	$hash->{Match} = "^Tado;.*" ;
 
@@ -150,165 +163,43 @@ sub TadoDevice_Undef($$)
 sub TadoDevice_Parse ($$)
 {
 	my ( $io_hash, $message) = @_;
-
-	Log3 "TadoDevice", 5, "TadoDevice_Parse: Dispatched message arrived in TadoDevice Device";
-
+	my $name = $io_hash->{NAME};
 
 	my @values = split(';', $message);
-	Log3 "TadoDevice", 5, "TadoDevice_Parse: Message was split, message is: " . join(", ", @values);
 
-	my $code = $io_hash->{NAME} . "-" . $values[1];
-	Log3 "TadoDevice", 5, "TadoDevice_Parse: Device Code is: " . $code;
+	my $code = $name . "-" . $values[1];
+	Log3 $name, 5, "TadoDevice_Parse: Device Code is: " . $code;
 
 	if(my $hash = $modules{TadoDevice}{defptr}{$code})
 	{
-		my $name = $hash->{NAME};
-		Log3 $name, 3, "TadoDevice_Parse: Entry found ($code), updating readings";
+    $name = $hash->{NAME};
+    Log3 $name, 3, "TadoDevice_Parse: Dispatched message arrived in TadoDevice $name";
+    Log3 $name, 4, "TadoDevice_Parse: Message was split, message is: " . join(", ", @values);
 
 		if($values[2] eq 'temp'){
 
-			readingsBeginUpdate($hash);
-
-			readingsBulkUpdate($hash, "measured-temp", $values[3] ) if( defined($values[3]) && !($values[3] eq ''));
-			readingsBulkUpdate($hash, "measured-temp-timestamp", $values[4] ) if( defined($values[4]) && !($values[4] eq ''));
-			readingsBulkUpdate($hash, "measured-temp-fahrenheit", $values[5] ) if( defined($values[5]) && !($values[5] eq ''));
-			readingsBulkUpdate($hash, "measured-temp-precision", $values[6] ) if( defined($values[6]) && !($values[6] eq ''));
-			readingsBulkUpdate($hash, "measured-temp-precision-fahrenheit", $values[7] ) if( defined($values[7]) && !($values[7] eq ''));
-			readingsBulkUpdate($hash, "desired-temp", $values[8] ) if( defined($values[8]) && !($values[8] eq ''));
-
-			readingsBulkUpdate($hash, "measured-humidity", $values[9] ) if( defined($values[9]) && !($values[9] eq ''));
-			readingsBulkUpdate($hash, "measured-humidity-timestamp", $values[10] ) if( defined($values[10]) && !($values[10] eq ''));
-
-			readingsBulkUpdate($hash, "link", $values[11] ) if( defined($values[11]) && !($values[11] eq ''));
-			readingsBulkUpdate($hash, "open-window", $values[12] ) if( defined($values[12]) && !($values[12] eq ''));
-
-			readingsBulkUpdate($hash, "heating-percentage", $values[13] ) if( defined($values[13]) && !($values[13] eq ''));
-			readingsBulkUpdate($hash, "heating-percentage-timestamp", $values[14] ) if( defined($values[14]) && !($values[14] eq ''));
-
-			readingsBulkUpdate($hash, "nextScheduleChange-temperature", $values[15] ) if( defined($values[15]) && !($values[15] eq ''));
-			readingsBulkUpdate($hash, "nextScheduleChange-power", $values[16] ) if( defined($values[16]) && !($values[16] eq ''));
-
-
-			readingsBulkUpdate($hash, "nextScheduleChange-start", $values[17]) if( defined($values[17]) && !($values[17] eq ''));
-
-			readingsBulkUpdate($hash, "tado-mode", $values[18]) if( defined($values[18]) && !($values[18] eq ''));
-
-			readingsBulkUpdate($hash, "overlay-active", $values[19]) if( defined($values[19]) && !($values[19] eq ''));
-
-			if ($values[19] eq "1"){
-				readingsBulkUpdate($hash, "overlay-mode", $values[20]) ;
-				readingsBulkUpdate($hash, "overlay-power", $values[21]);
-				readingsBulkUpdate($hash, "overlay-desired-temperature", $values[22]);
-				readingsBulkUpdate($hash, "overlay-termination-mode", $values[23]);
-				readingsBulkUpdate($hash, "overlay-termination-durationInSeconds", $values[24]);
-				readingsBulkUpdate($hash, "overlay-termination-expiry", $values[25]);
-				readingsBulkUpdate($hash, "overlay-termination-remainingTimeInSeconds", $values[26]);
-			} else {
-				Log3 $name, 5, "TadoDevice_Parse: No overlay data available. Deleting overlay readings.";
-				readingsDelete($hash, "overlay-mode" );
-				readingsDelete($hash, "overlay-power");
-				readingsDelete($hash, "overlay-desired-temperature");
-				readingsDelete($hash, "overlay-termination-mode");
-				readingsDelete($hash, "overlay-termination-durationInSeconds");
-				readingsDelete($hash, "overlay-termination-expiry");
-				readingsDelete($hash, "overlay-termination-remainingTimeInSeconds");
-			}
-
-			readingsEndUpdate($hash, 1);
-
-
-			if ($values[11] eq 'ONLINE'){
-				if ($values[8] ne 'OFF') {
-					if ($values[9] ne '') {
-						readingsSingleUpdate($hash, 'state', sprintf("T: %.1f &deg;C desired: %.1f &deg;C H: %.1f%%", $values[3], $values[8], $values[9]), 1);
-					} else {
-					    if ($values[3] ne '') {
- 	                                        readingsSingleUpdate($hash, 'state', sprintf("T: %.1f &deg;C desired: %.1f &deg;C", $values[3], $values[8]), 1);
-					    } else {
-	                                        readingsSingleUpdate($hash, 'state', sprintf("desired: %.1f &deg;C", $values[8]), 1);
-					    }
-					}
-				} else {
-					if ($values[9] ne '') {
-					   readingsSingleUpdate($hash, 'state', sprintf("T: %.1f &deg;C desired: off H: %.1f%%", $values[3],  $values[9]), 1);
-				  	} else {
-					   if ($values[3] ne '') {
-						 readingsSingleUpdate($hash, 'state', sprintf("T: %.1f &deg;C desired: off", $values[3]), 1);
-					   } else {
-                                                 readingsSingleUpdate($hash, 'state', "desired: off", 1);
-					   }
-					}
-				}
-			} else {
-				readingsSingleUpdate($hash, 'state', "Device is in status '$values[11]'.", 1);
-			}
+		    Processing_Temperature($hash, \@values);
 
 		} elsif ($values[2] eq 'earlyStart') {
+
 			CommandAttr(undef,"$name earlyStart $values[3]");
+
 		} elsif ($values[2] eq 'weather') {
-			readingsBeginUpdate($hash);
 
-			readingsBulkUpdate($hash, "solarIntensity", $values[3] ) if( defined($values[3]) && !($values[3] eq ''));
-			readingsBulkUpdate($hash, "solarIntensity-timestamp", $values[4] ) if( defined($values[4]) && !($values[4] eq ''));
-			readingsBulkUpdate($hash, "outsideTemperature", $values[5] ) if( defined($values[5]) && !($values[5] eq ''));
-			readingsBulkUpdate($hash, "outsideTemperature-timestamp", $values[6] ) if( defined($values[6]) && !($values[6] eq ''));
-			readingsBulkUpdate($hash, "weatherState", $values[7] ) if( defined($values[7]) && !($values[7] eq ''));
-			readingsBulkUpdate($hash, "weatherState-timestamp", $values[8] ) if( defined($values[8]) && !($values[8] eq ''));
+        Processing_Weather($hash, \@values);
 
-			readingsEndUpdate($hash, 1);
-
-			readingsSingleUpdate($hash, 'state', sprintf("T: %.1f &deg;C Solar: %.1f%% <br>%s", $values[5], $values[3], $values[7]) , 1);
 		} elsif ($values[2] eq 'locationdata') {
-			readingsBeginUpdate($hash);
 
-			readingsBulkUpdate($hash, "geoTrackingEnabled", $values[3] ) if( defined($values[3]) && !($values[3] eq ''));
-			readingsBulkUpdate($hash, "location_stale", $values[4] ) if( defined($values[4]) && !($values[4] eq ''));
-			readingsBulkUpdate($hash, "location_atHome", $values[5] ) if( defined($values[5]) && !($values[5] eq ''));
-			readingsBulkUpdate($hash, "bearingFromHome_degrees", $values[6] ) if( defined($values[6]) && !($values[6] eq ''));
-			readingsBulkUpdate($hash, "bearingFromHome_radians", $values[7] ) if( defined($values[7]) && !($values[7] eq ''));
-			readingsBulkUpdate($hash, "location_relativeDistanceFromHomeFence", $values[8] ) if( defined($values[8]) && !($values[8] eq ''));
-
-			readingsBulkUpdate($hash, "pushNotification_LowBatteryReminder", $values[9] ) if( defined($values[9]) && !($values[9] eq ''));
-			readingsBulkUpdate($hash, "pushNotification_awayModeReminder", $values[10] ) if( defined($values[10]) && !($values[10] eq ''));
-			readingsBulkUpdate($hash, "pushNotification_homeModeReminder", $values[11] ) if( defined($values[11]) && !($values[11] eq ''));
-			readingsBulkUpdate($hash, "pushNotification_openWindowReminder", $values[12] ) if( defined($values[12]) && !($values[12] eq ''));
-			readingsBulkUpdate($hash, "pushNotification_energySavingsReportReminder", $values[13] ) if( defined($values[13]) && !($values[13] eq ''));
-
-			readingsBulkUpdate($hash, "device_platform", $values[14] ) if( defined($values[14]) && !($values[14] eq ''));
-			readingsBulkUpdate($hash, "device_os_version", $values[15] ) if( defined($values[15]) && !($values[15] eq ''));
-			readingsBulkUpdate($hash, "device_model", $values[16] ) if( defined($values[16]) && !($values[16] eq ''));
-			readingsBulkUpdate($hash, "device_locale", $values[17] ) if( defined($values[17]) && !($values[17] eq ''));
-
-
-      if ($values[3] eq '0') {
-				readingsBulkUpdate($hash, 'state', sprintf("Tracking: OFF"), 1);
-			} else {
-					readingsBulkUpdate($hash, 'state', "Tracking: ON Home: ". defined $values[5] ? $values[5] : 'undef', 1);
-			}
-
-
-			readingsEndUpdate($hash, 1);
+       Processing_LocationData ($hash, \@values);
 
 		} elsif ($values[2] eq 'airComfort') {
-			readingsBeginUpdate($hash);
 
-			readingsBulkUpdate($hash, "airComfort_temperatureLevel", $values[3] ) if( defined($values[3]) && !($values[3] eq ''));
-			readingsBulkUpdate($hash, "airComfort_humidityLevel", $values[4] ) if( defined($values[4]) && !($values[4] eq ''));
-			readingsBulkUpdate($hash, "airComfort_graph_radial", $values[5] ) if( defined($values[5]) && !($values[5] eq ''));
-			readingsBulkUpdate($hash, "airComfort_graph_angular", $values[6] ) if( defined($values[6]) && !($values[6] eq ''));
-
-			readingsEndUpdate($hash, 1);
+       Processing_AirComfort ($hash, \@values);
 
 		} elsif ($values[2] eq 'devicedata') {
-			readingsBeginUpdate($hash);
 
-			readingsBulkUpdate($hash, "currentFwVersion", $values[3] ) if( defined($values[3]) && !($values[3] eq ''));
-			readingsBulkUpdate($hash, "inPairingMode", $values[4] ) if( defined($values[4]) && !($values[4] eq ''));
-			readingsBulkUpdate($hash, "batteryState", $values[5] ) if( defined($values[5]) && !($values[5] eq ''));
-			readingsBulkUpdate($hash, "connectionState", $values[6] ) if( defined($values[6]) && !($values[6] eq ''));
-			readingsBulkUpdate($hash, "connectionStateLastUpdate", $values[7] ) if( defined($values[7]) && !($values[7] eq ''));
+       Processing_DeviceData ($hash, \@values);
 
-			readingsEndUpdate($hash, 1);
 		}
 
 		# Rückgabe des Gerätenamens, für welches die Nachricht bestimmt ist.
@@ -318,6 +209,253 @@ sub TadoDevice_Parse ($$)
 	{
 		Log3 "TadoDevice", 2, "TadoDevice: No device entry found for code $code. Tried to process message: $message";
 		return "UNDEFINED. Please define TadoDevice for tado ID $values[0]";
+	}
+}
+
+
+sub Processing_Temperature {
+
+  my $hash   = shift;
+  my $vals   = shift;
+  my @values = @{$vals};
+
+  my $name = $hash->{NAME};
+
+  readingsBeginUpdate($hash);
+
+  WriteReading($hash, "measured-temp", $values[3] );
+  WriteReading($hash, "measured-temp-timestamp", $values[4]);
+  WriteReading($hash, "measured-temp-fahrenheit", $values[5]);
+  WriteReading($hash, "measured-temp-precision", $values[6] );
+  WriteReading($hash, "measured-temp-precision-fahrenheit", $values[7] ) ;
+  WriteReading($hash, "desired-temp", $values[8] );
+
+  WriteReading($hash, "measured-humidity", $values[9] );
+  WriteReading($hash, "measured-humidity-timestamp", $values[10] );
+
+  WriteReading($hash, "link", $values[11] );
+
+
+
+
+  WriteReading($hash, "open-window-plain-reading", $values[12]);
+  WriteReading($hash, "open-window-detected-plain-reading", $values[13]);
+  WriteReading($hash, "open-window", ($values[12] eq 'true' || $values[13] eq 'true') ? 'true' : 'false' );
+
+
+  WriteReading($hash, "heating-percentage", $values[14] ) ;
+  WriteReading($hash, "heating-percentage-timestamp", $values[15] );
+
+  WriteReading($hash, "nextScheduleChange-temperature", $values[16] );
+  WriteReading($hash, "nextScheduleChange-power", $values[17] );
+
+
+  WriteReading($hash, "nextScheduleChange-start", $values[18]);
+
+  WriteReading($hash, "tado-mode", $values[19]);
+
+  WriteReading($hash, "overlay-active", $values[20]);
+
+  if ($values[20] eq "1"){
+    WriteReading($hash, "overlay-mode", $values[21]) ;
+    WriteReading($hash, "overlay-power", $values[22]);
+    WriteReading($hash, "overlay-desired-temperature", $values[23]);
+    WriteReading($hash, "overlay-termination-mode", $values[25]);
+    WriteReading($hash, "overlay-termination-durationInSeconds", $values[25]);
+    WriteReading($hash, "overlay-termination-expiry", $values[26]);
+    WriteReading($hash, "overlay-termination-remainingTimeInSeconds", $values[27]);
+  } else {
+    Log3 $name, 5, "TadoDevice_Parse: No overlay data available. Deleting overlay readings.";
+    readingsDelete($hash, "overlay-mode" );
+    readingsDelete($hash, "overlay-power");
+    readingsDelete($hash, "overlay-desired-temperature");
+    readingsDelete($hash, "overlay-termination-mode");
+    readingsDelete($hash, "overlay-termination-durationInSeconds");
+    readingsDelete($hash, "overlay-termination-expiry");
+    readingsDelete($hash, "overlay-termination-remainingTimeInSeconds");
+  }
+
+  readingsEndUpdate($hash, 1);
+
+
+  if ($values[11] eq 'ONLINE'){
+    if ($values[8] ne 'OFF') {
+      if ($values[9] ne '') {
+        readingsSingleUpdate($hash, 'state', sprintf("T: %.1f &deg;C desired: %.1f &deg;C H: %.1f%%", $values[3], $values[8], $values[9]), 1);
+      } else {
+          if ($values[3] ne '') {
+                                      readingsSingleUpdate($hash, 'state', sprintf("T: %.1f &deg;C desired: %.1f &deg;C", $values[3], $values[8]), 1);
+          } else {
+                                      readingsSingleUpdate($hash, 'state', sprintf("desired: %.1f &deg;C", $values[8]), 1);
+          }
+      }
+    } else {
+      if ($values[9] ne '') {
+         readingsSingleUpdate($hash, 'state', sprintf("T: %.1f &deg;C desired: off H: %.1f%%", $values[3],  $values[9]), 1);
+        } else {
+         if ($values[3] ne '') {
+         readingsSingleUpdate($hash, 'state', sprintf("T: %.1f &deg;C desired: off", $values[3]), 1);
+         } else {
+                                             readingsSingleUpdate($hash, 'state', "desired: off", 1);
+         }
+      }
+    }
+  } else {
+    readingsSingleUpdate($hash, 'state', "Device is in status '$values[11]'.", 1);
+  }
+
+}
+
+sub Processing_Weather {
+
+  my $hash   = shift;
+  my $vals   = shift;
+  my @values = @{$vals};
+
+  my $name = $hash->{NAME};
+
+  readingsBeginUpdate($hash);
+
+  readingsBulkUpdate($hash, "solarIntensity", $values[3] ) if( defined($values[3]) && !($values[3] eq ''));
+  readingsBulkUpdate($hash, "solarIntensity-timestamp", $values[4] ) if( defined($values[4]) && !($values[4] eq ''));
+  readingsBulkUpdate($hash, "outsideTemperature", $values[5] ) if( defined($values[5]) && !($values[5] eq ''));
+  readingsBulkUpdate($hash, "outsideTemperature-timestamp", $values[6] ) if( defined($values[6]) && !($values[6] eq ''));
+  readingsBulkUpdate($hash, "weatherState", $values[7] ) if( defined($values[7]) && !($values[7] eq ''));
+  readingsBulkUpdate($hash, "weatherState-timestamp", $values[8] ) if( defined($values[8]) && !($values[8] eq ''));
+
+  readingsEndUpdate($hash, 1);
+
+  readingsSingleUpdate($hash, 'state', sprintf("T: %.1f &deg;C Solar: %.1f%% <br>%s", $values[5], $values[3], $values[7]) , 1);
+
+}
+
+sub Processing_LocationData {
+
+  my $hash   = shift;
+  my $vals   = shift;
+  my @values = @{$vals};
+
+  my $name = $hash->{NAME};
+
+  readingsBeginUpdate($hash);
+
+  WriteBooleanAttribute($name, 'geoTrackingEnabled', $values[3]);
+  WriteBooleanAttribute($name, 'specialOffersEnabled', $values[20]);
+  WriteBooleanAttribute($name, 'onDemandLogRetrievalEnabled', $values[21]) if( defined($values[21]) && !($values[21] eq ''));
+
+  WriteBooleanReading($hash, 'stale', $values[4]);
+  WriteBooleanReading($hash, "atHome", $values[5]);
+
+  WriteReading($hash, "bearingFromHome_degrees", $values[6]);
+  WriteReading($hash, "bearingFromHome_radians", $values[7]);
+  WriteReading($hash, "relativeDistanceFromHomeFence", $values[8]);
+
+  WriteBooleanAttribute($name, 'pushNotification_LowBatteryReminder', $values[9]);
+  WriteBooleanAttribute($name, 'pushNotification_awayModeReminder', $values[10]);
+  WriteBooleanAttribute($name, 'pushNotification_homeModeReminder', $values[11]);
+  WriteBooleanAttribute($name, 'pushNotification_openWindowReminder', $values[12]);
+  WriteBooleanAttribute($name, 'pushNotification_energySavingsReportReminder', $values[13]);
+  WriteBooleanAttribute($name, 'pushNotification_incidentDetection', $values[14]);
+  WriteBooleanAttribute($name, 'pushNotification_energyIqReminder', $values[15]);
+
+  readingsBulkUpdate($hash, "device_os_version", $values[17] ) if( defined($values[15]) && !($values[17] eq ''));
+
+
+  if ($values[3] eq '0') {
+    readingsBulkUpdate($hash, 'state', sprintf("Tracking: OFF"), 1);
+    readingsBulkUpdate($hash, "homeState", "Off");
+  } else {
+      my $homeState = defined $values[5] ? $values[5] : 'undef';
+      $homeState = $homeState ?  "HOME" : "AWAY";
+      readingsBulkUpdate($hash, 'state', $homeState , 1);
+      readingsBulkUpdate($hash, "homeState", $homeState);
+  }
+
+
+  readingsEndUpdate($hash, 1);
+}
+
+sub Processing_AirComfort {
+
+  my $hash   = shift;
+  my $vals   = shift;
+  my @values = @{$vals};
+
+  my $name = $hash->{NAME};
+
+  readingsBeginUpdate($hash);
+
+  readingsBulkUpdate($hash, "airComfort_temperatureLevel", $values[3] ) if( defined($values[3]) && !($values[3] eq ''));
+  readingsBulkUpdate($hash, "airComfort_humidityLevel", $values[4] ) if( defined($values[4]) && !($values[4] eq ''));
+  readingsBulkUpdate($hash, "airComfort_graph_radial", $values[5] ) if( defined($values[5]) && !($values[5] eq ''));
+  readingsBulkUpdate($hash, "airComfort_graph_angular", $values[6] ) if( defined($values[6]) && !($values[6] eq ''));
+
+  readingsEndUpdate($hash, 1);
+
+}
+
+sub Processing_DeviceData {
+
+  my $hash   = shift;
+  my $vals   = shift;
+  my @values = @{$vals};
+
+  my $name = $hash->{NAME};
+
+  readingsBeginUpdate($hash);
+
+  readingsBulkUpdate($hash, "currentFwVersion", $values[3] ) if( defined($values[3]) && !($values[3] eq ''));
+  readingsBulkUpdate($hash, "inPairingMode", $values[4] ) if( defined($values[4]) && !($values[4] eq ''));
+  readingsBulkUpdate($hash, "batteryState", $values[5] ) if( defined($values[5]) && !($values[5] eq ''));
+  readingsBulkUpdate($hash, "connectionState", $values[6] ) if( defined($values[6]) && !($values[6] eq ''));
+  readingsBulkUpdate($hash, "connectionStateLastUpdate", $values[7] ) if( defined($values[7]) && !($values[7] eq ''));
+
+  readingsEndUpdate($hash, 1);
+
+}
+
+
+
+sub WriteBooleanAttribute {
+
+  my $name = shift;
+	my $attributeName = shift;
+	my $attributeValue = shift;
+
+	if( defined($attributeValue) && !($attributeValue eq '')) {
+		my $value = (int($attributeValue) < 1) ? 'false' : 'true';
+		my $currentValue = AttrVal($name, $attributeName, 'N/A');
+		Log3 $name, 5, "Attribute $attributeName: comparing old value $currentValue with new value $value.";
+		if ($currentValue ne $value) {
+			Log3 $name, 3, "Writing attribute $attributeName for device $name to $value.";
+			CommandAttr(undef,"$name $attributeName $value");
+		}
+	}
+}
+
+sub WriteBooleanReading {
+	my $hash = shift;
+	my $readingName = shift;
+	my $readingValue = shift;
+
+	if( defined($readingValue) && !($readingValue eq '')) {
+		my $value = (int($readingValue) < 1) ? 'false' : 'true';
+		WriteReading($hash, $readingName, $value);
+	} else {
+		readingsDelete($hash, $readingName);
+	}
+}
+
+sub WriteReading {
+	my $hash = shift;
+	my $readingName = shift;
+	my $readingValue = shift;
+	my $name = $hash->{NAME};
+
+	if( defined($readingValue) && !($readingValue eq '')) {
+		readingsBulkUpdate($hash, $readingName, $readingValue );
+	} else {
+		readingsDelete($hash, $readingName);
 	}
 }
 
@@ -462,6 +600,62 @@ sub TadoDevice_Attr(@)
 			}
 		}
 	}
+
+	if ($aName eq "geoTrackingEnabled") {
+		if ($cmd eq "set") {
+			if ($aVal ne 'true' && $aVal ne 'false') {
+				return "Invalid attribute value. Attribute geoTrackingEnabled only supports values 'true' and 'false'";
+			}
+			Log3 $hash, 3, "TadoDevice: $name geoTrackingEnabled $aVal.";
+			my $ret = IOWrite($hash, "geoTrackingEnabled", InternalVal($name, "TadoId", undef), $aVal);
+			return $ret;
+		} elsif ($cmd eq "del"){
+			Log3 $hash, 3, "TadoDevice: $name geoTrackingEnabled attribute was deleted. Setting geoTrackingEnabled to false via Tado web API.";
+			my $ret = IOWrite($hash, "geoTrackingEnabled", InternalVal($name, "TadoId", undef), 'false');
+			return $ret;
+		}
+	}
+
+		if ($aName =~ 'geoTrackingEnabled|onDemandLogRetrievalEnabled|specialOffersEnabled') {
+		if ($cmd eq "set") {
+			if ($aVal ne 'true' && $aVal ne 'false') {
+				return "Invalid attribute value. Attribute $aName only supports values 'true' and 'false'";
+			}
+			Log3 $hash, 3, "TadoDevice: $name $aName $aVal.";
+			my $ret = IOWrite($hash, $aName, InternalVal($name, "TadoId", undef), $aVal);
+			return $ret;
+		} elsif ($cmd eq "del"){
+			Log3 $hash, 3, "TadoDevice: $name $aName attribute was deleted. Setting geoTrackingEnabled to false via Tado web API.";
+			my $ret = IOWrite($hash, $aName, InternalVal($name, "TadoId", undef), 'false');
+			return $ret;
+		}
+	}
+
+
+	if ($aName =~ /^pushNotification/) {
+		if ($cmd eq "set") {
+			if ($aVal ne 'true' && $aVal ne 'false') {
+				return "Invalid attribute value. Attribute $aName only supports values 'true' and 'false'";
+			}
+			Log3 $hash, 3, "TadoDevice: $name $aName $aVal.";
+			my $p1 = ($aName eq 'pushNotification_LowBatteryReminder') ? $aVal : AttrVal($name,"pushNotification_LowBatteryReminder","false");
+			my $p2 = ($aName eq 'pushNotification_awayModeReminder') ? $aVal : AttrVal($name,"pushNotification_awayModeReminder","false");
+			my $p3 = ($aName eq 'pushNotification_homeModeReminder') ? $aVal : AttrVal($name,"pushNotification_homeModeReminder","false");
+			my $p4 = ($aName eq 'pushNotification_energySavingsReportReminder') ? $aVal : AttrVal($name,"pushNotification_energySavingsReportReminder","false");
+			my $p5 = ($aName eq 'pushNotification_openWindowReminder') ? $aVal : AttrVal($name,"pushNotification_openWindowReminder","false");
+
+			my $p6 = ($aName eq 'pushNotification_incidentDetection') ? $aVal : AttrVal($name,"pushNotification_incidentDetection","");
+			my $p7 = ($aName eq 'pushNotification_energyIqReminder') ? $aVal : AttrVal($name,"pushNotification_energyIqReminder","");
+			my $ret = IOWrite($hash, "pushNotifications", InternalVal($name, "TadoId", undef), $p1, $p2, $p3, $p4, $p5, $p6, $p7);
+			return $ret;
+		} elsif ($cmd eq "del"){
+			Log3 $hash, 3, "TadoDevice: $name geoTrackingEnabled attribute was deleted. Setting geoTrackingEnabled to false via Tado web API.";
+			my $ret = IOWrite($hash, "geoTrackingEnabled", InternalVal($name, "TadoId", undef), 'false');
+			return $ret;
+		}
+	}
+
+
 	return undef;
 }
 

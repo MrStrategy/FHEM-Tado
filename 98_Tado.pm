@@ -35,6 +35,7 @@ BEGIN {
           Attr
 					AttrVal
 					CommandAttr
+					CommandDefine
 					Dispatch
 					makeDeviceName
 					modules
@@ -79,9 +80,10 @@ getOAuthToken          => 'https://auth.tado.com/oauth/token',
 getZoneTemperature     => 'https://my.tado.com/api/v2/homes/#HomeID#/zones/#ZoneID#/state',
 setZoneTemperature     => 'https://my.tado.com/api/v2/homes/#HomeID#/zones/#ZoneID#/overlay',
 earlyStart             => 'https://my.tado.com/api/v2/homes/#HomeID#/zones/#ZoneID#/earlyStart',
-getZoneDetails         => 'https://my.tado.com/api/v2/homes/#HomeID#/zones' ,
+getZoneDetails         => 'https://my.tado.com/api/v2/homes/#HomeID#/zones',
 getHomeId              => 'https://my.tado.com/api/v2/me',
-getMobileDevices       => 'https://my.tado.com/api/v2/me',
+getMobileDevices       => 'https://my.tado.com/api/v2/homes/#HomeID#/mobileDevices',
+UpdateMobileDevice     => 'https://my.tado.com/api/v2/homes/#HomeID#/mobileDevices/#DeviceId#/settings',
 getHomeDetails         =>  'https://my.tado.com/api/v2/homes/#HomeID#',
 getWeather             =>  'https://my.tado.com/api/v2/homes/#HomeID#/weather',
 getDevices             =>  'https://my.tado.com/api/v2/homes/#HomeID#/devices',
@@ -835,7 +837,15 @@ sub GetMobileDevices($)
 		return $msg;
 	}
 
+	my $homeID = ReadingsVal ($name,"HomeID",undef);
+	if (not defined $homeID) {
+		my $msg = "Error on GetEarlyStart. Missing HomeID. Please define Home first.";
+		Log3 $name, 1, $msg;
+		return $msg;
+	}
+
 	my $readTemplate = $url{"getMobileDevices"};
+	$readTemplate =~ s/#HomeID#/$homeID/g;
 	my $d = httpSimpleOperationOAuth( $hash , $readTemplate, 'GET'  );
 
 	if (defined $d && ref($d) eq "HASH" && defined $d->{errors}){
@@ -851,7 +861,7 @@ sub GetMobileDevices($)
 		my %MobileDeviceIds = ();
 
 		my $count = 0;
-		for my $item( @{$d->{mobileDevices}} ){
+		for my $item( @{$d} ){
 			$count++;
 			readingsBulkUpdate($hash, "MobileDeviceCount", $count);
 
@@ -893,6 +903,7 @@ sub GetMobileDevices($)
 					$deviceHash->{device_osVersion} = $item->{deviceMetadata}->{osVersion};
 					$deviceHash->{device_locale} = $item->{deviceMetadata}->{locale};
 					$deviceHash->{device_model} = $item->{deviceMetadata}->{model};
+
 				}
 			}
 		}
@@ -1329,7 +1340,7 @@ sub UpdateMobileDeviceCallback($)
 			return undef;
 		}
 
-		for my $item( @{$d->{mobileDevices}} ){
+		for my $item( @{$d} ){
 
 			my $message = "Tado;$item->{id};locationdata;"
 			. $item->{settings}->{geoTrackingEnabled}. ";";
@@ -1348,7 +1359,6 @@ sub UpdateMobileDeviceCallback($)
 				my $locationDistance = $item->{location}->{relativeDistanceFromHomeFence};
 				$message.=      defined $locationDistance ? $locationDistance.";" : ";" ;
 
-
 			} else {
 				$message .= ";;;;;"
 			}
@@ -1361,8 +1371,12 @@ sub UpdateMobileDeviceCallback($)
 				. $item->{settings}->{pushNotifications}->{homeModeReminder}. ";"
 				. $item->{settings}->{pushNotifications}->{openWindowReminder}. ";"
 				. $item->{settings}->{pushNotifications}->{energySavingsReportReminder}.";";
+				my $val = $item->{settings}->{pushNotifications}->{incidentDetection};
+				$message.=      defined $val ? $val.";" : ";" ;
+				$val = $item->{settings}->{pushNotifications}->{energyIqReminder};
+				$message.=      defined $val ? $val.";" : ";" ;
 			} else {
-				$message .=";;;;;"
+				$message .=";;;;;;;"
 			}
 
 
@@ -1380,6 +1394,10 @@ sub UpdateMobileDeviceCallback($)
 				$message .=";;;;"
 			}
 
+			my $specialOffersEnabled = $item->{settings}->{specialOffersEnabled};
+			$message.=      defined $specialOffersEnabled ? $specialOffersEnabled.";" : ";" ;
+			my $onDemandLogRetrievalEnabled = $item->{settings}->{onDemandLogRetrievalEnabled};
+			$message.=      defined $onDemandLogRetrievalEnabled ? $onDemandLogRetrievalEnabled.";" : ";" ;
 
 			Log3 $name, 4, "$name: trying to dispatch message: $message";
 			my $found = Dispatch($hash, $message);
@@ -1576,9 +1594,17 @@ sub RequestMobileDeviceUpdate($)
 		return undef;
 	}
 
+	my $homeID = ReadingsVal ($name,"HomeID",undef);
+	if (not defined $homeID) {
+		my $msg = "Error on GetEarlyStart. Missing HomeID. Please define Home first.";
+		Log3 $name, 1, $msg;
+		return $msg;
+	}
+
 
 	Log3 $name, 4, "RequestMobileDeviceUpdate Called. Name: $name";
 	my $readTemplate = $url{getMobileDevices};
+	$readTemplate =~ s/#HomeID#/$homeID/g;
 	my $CurrentTokenData = LoadToken($hash);
 
 	my $request = {
@@ -1686,6 +1712,16 @@ sub UpdateZoneCallback($)
 		} else {
 			$message .= $d->{openWindow} . ";"
 		}
+
+    #open-window
+		if (not defined $d->{openWindowDetected}) {
+			$message .= "false;"
+		} else {
+			$message .= $d->{openWindowDetected} . ";"
+		}
+
+
+    
 		#heating-percentage
 		my $heatingPowerTemperature = $d->{activityDataPoints}->{heatingPower}->{percentage};
 		$message.=	defined $heatingPowerTemperature ? $heatingPowerTemperature.";" : ";" ;
@@ -2010,7 +2046,11 @@ sub UpdatePresenceStatus($$)
 
 sub Write ($$)
 {
-	my ($hash,$code,$zoneID,$param1,$param2)= @_;
+	my $hash = shift;
+	my $code = shift;
+	my $zoneID = shift;
+	my $param1 = shift;
+	my $param2 = shift;
 	my $name = $hash->{NAME};
 
 	if ($code eq 'Temp')
@@ -2057,9 +2097,7 @@ sub Write ($$)
 		my $setting = $param1;
 
 		my $readTemplate = $url{"earlyStart"};
-
 		my $homeID = ReadingsVal ($name,"HomeID",undef);
-
 		$readTemplate =~ s/#HomeID#/$homeID/g;
 		$readTemplate =~ s/#ZoneID#/$zoneID/g;
 
@@ -2073,6 +2111,56 @@ sub Write ($$)
 		}
 		return $d->{enabled};
 	}
+
+	if ($code =~ 'geoTrackingEnabled|onDemandLogRetrievalEnabled|specialOffersEnabled')
+	{
+		my $setting = $param1;
+
+		my $readTemplate = $url{"UpdateMobileDevice"};
+		my $homeID = ReadingsVal ($name,"HomeID",undef);
+		$readTemplate =~ s/#HomeID#/$homeID/g;
+		$readTemplate =~ s/#DeviceId#/$zoneID/g;
+
+		my %message ;
+		$message{$code} = $setting;
+
+		my $d = httpSimpleOperationOAuth( $hash , $readTemplate, 'PUT' , encode_json \%message  );
+
+		if (defined $d && ref($d) eq "HASH" && defined $d->{errors}){
+			return "Error: $d->{errors}[0]->{code} / $d->{errors}[0]->{title}";
+		}
+        RequestMobileDeviceUpdate($hash);
+		return $d->{enabled};
+	}
+
+
+	if ($code eq 'pushNotifications')
+	{
+		my $readTemplate = $url{"UpdateMobileDevice"};
+		my $homeID = ReadingsVal ($name,"HomeID",undef);
+		$readTemplate =~ s/#HomeID#/$homeID/g;
+		$readTemplate =~ s/#DeviceId#/$zoneID/g;
+
+		my %message ;
+		$message{'pushNotifications'}->{'lowBatteryReminder'}  = $param1;
+		$message{'pushNotifications'}->{'awayModeReminder'}  = $param2;
+		$message{'pushNotifications'}->{'homeModeReminder'}  = shift;
+		$message{'pushNotifications'}->{'energySavingsReportReminder'}  = shift;
+		$message{'pushNotifications'}->{'openWindowReminder'}  = shift;
+		my $val = shift;
+        $message{'pushNotifications'}->{'energySavingsReportReminder'}  = $val if( defined($val) && !($val eq ''));
+        $val = shift;
+		$message{'pushNotifications'}->{'openWindowReminder'}  = $val if( defined($val) && !($val eq ''));
+
+
+		my $d = httpSimpleOperationOAuth( $hash , $readTemplate, 'PUT' , encode_json \%message  );
+
+		if (defined $d && ref($d) eq "HASH" && defined $d->{errors}){
+			return "Error: $d->{errors}[0]->{code} / $d->{errors}[0]->{title}";
+		}
+		return $d->{enabled};
+	}
+
 
 	if ($code eq 'Update')
 	{
