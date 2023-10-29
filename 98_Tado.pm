@@ -185,9 +185,9 @@ sub Define($$)
 
 	readingsSingleUpdate($hash,'state','Undefined',0);
 
-	CommandAttr(undef,$name.' generateDevices no') if ( AttrVal($name,'generateDevices','none') eq 'none' );
-	CommandAttr(undef,$name.' generateMobileDevices no') if ( AttrVal($name,'generateMobileDevices','none') eq 'none' );
-	CommandAttr(undef,$name.' generateWeather no') if ( AttrVal($name,'generateWeather','none') eq 'none' );
+  GenerateAttribute($name,"generateDevices","no");
+  GenerateAttribute($name,"generateMobileDevices","no");
+  GenerateAttribute($name,"generateWeather","no");
 
 	#Initial load of the homes
 	GetHomesAndDevices($hash);
@@ -202,6 +202,14 @@ sub Define($$)
 	InternalTimer(gettimeofday()+ InternalVal($name,'INTERVAL', undef), "FHEM::Tado::UpdateDueToTimer", $hash) if (defined $hash);
 	return undef;
 }
+
+
+#Generate a new attribute if it is not existing yet
+sub GenerateAttribute {
+  my ($name, $attributeName, $value) = @_;
+  CommandAttr(undef,"$name $attributeName $value") if ( AttrVal($name,$attributeName ,'none') eq 'none' );
+}
+
 
 
 sub Undef($$)
@@ -563,7 +571,7 @@ sub Set($@)
 				#return "Unknown argument $status, choose one of homeAwayStatus:". join(",", @pList);
 			}
 
-			UpdatePresenceStatus($hash,$status);
+			WritePresenceStatus2Tado($hash,$status);
 
 
 		}
@@ -1302,8 +1310,6 @@ sub UpdateDeviceCallback($)
 
 }
 
-
-
 sub UpdateMobileDeviceCallback($)
 {
 	my ($param, $err, $data) = @_;
@@ -1416,8 +1422,6 @@ sub UpdateMobileDeviceCallback($)
 
 }
 
-
-
 sub RequestWeatherUpdate($)
 {
 	my ($hash) = @_;
@@ -1475,8 +1479,6 @@ sub RequestWeatherUpdate($)
 
 }
 
-
-
 sub RequestDeviceUpdate($)
 {
 	my ($hash) = @_;
@@ -1528,7 +1530,6 @@ sub RequestDeviceUpdate($)
 
 }
 
-
 sub RequestPresenceUpdate($)
 {
 	my ($hash) = @_;
@@ -1573,8 +1574,6 @@ sub RequestPresenceUpdate($)
 	HttpUtils_NonblockingGet($request);
 
 }
-
-
 
 sub RequestMobileDeviceUpdate($)
 {
@@ -1721,7 +1720,7 @@ sub UpdateZoneCallback($)
 		}
 
 
-    
+
 		#heating-percentage
 		my $heatingPowerTemperature = $d->{activityDataPoints}->{heatingPower}->{percentage};
 		$message.=	defined $heatingPowerTemperature ? $heatingPowerTemperature.";" : ";" ;
@@ -1905,7 +1904,6 @@ sub UpdateDueToTimer($)
 
 }
 
-
 sub RequestZoneUpdate($)
 {
 	my ($hash) = @_;
@@ -1994,11 +1992,8 @@ sub RequestAirComfortUpdate($)
 	Log3 $name, 4, "RequestAirComfortUpdate called for non-blocking value update. Name: $name";
 	Log3 $name, 3, "Getting air comfort update.";
 
-	my $readTemplate = $url{"getAirComfort"};
+	my $readTemplate = GetMessageTemplate($hash, "getAirComfort" );
 	my $CurrentTokenData = LoadToken($hash);
-
-
-	$readTemplate =~ s/#HomeID#/$homeID/g;
 
 
 	my $request = {
@@ -2021,50 +2016,65 @@ sub RequestAirComfortUpdate($)
 }
 
 
-sub UpdatePresenceStatus($$)
-{
 
-	 my ($hash, $homeAwayStatus) = @_;
-	 my $name = $hash->{NAME};
-
-		my $readTemplate = $url{"setPresenceStatus"};
-		my $homeID = ReadingsVal ($name,"HomeID",undef);
-
-		$readTemplate =~ s/#HomeID#/$homeID/g;
-
-		my %message ;
-		$message{'homePresence'} = $homeAwayStatus;
-
-		my $d = httpSimpleOperationOAuth( $hash , $readTemplate, 'PUT',  encode_json \%message  );
-
-		RequestPresenceUpdate($hash);
-		return undef;
-}
 
 
 
 
 sub Write ($$)
 {
-	my $hash = shift;
-	my $code = shift;
-	my $zoneID = shift;
-	my $param1 = shift;
-	my $param2 = shift;
+	my ($hash, $code, $zoneID, @params) = @_;
+
 	my $name = $hash->{NAME};
 
 	if ($code eq 'Temp')
 	{
-		my $duration = $param1;
-		my $temperature = $param2;
+	   return WriteTemperature2Tado($hash, $zoneID, @params);
+	}
 
-		my $readTemplate = $url{"setZoneTemperature"};
-		my $homeID = ReadingsVal ($name,"HomeID",undef);
+	if ($code eq 'EarlyStart')
+	{
+    return WriteEarlyStart2Tado($hash, $zoneID, @params);
+	}
 
-		$readTemplate =~ s/#HomeID#/$homeID/g;
-		$readTemplate =~ s/#ZoneID#/$zoneID/g;
+	if ($code =~ 'geoTrackingEnabled|onDemandLogRetrievalEnabled|specialOffersEnabled')
+	{
+    return WriteMobileSettings2Tado($hash, $zoneID, $code, @params);
 
-		my %message ;
+	}
+
+	if ($code eq 'pushNotifications')
+	{
+    return WriteMobilePushNotificationSettings2Tado($hash, $zoneID, @params);
+	}
+
+	if ($code eq 'Update')
+	{
+		RequestZoneUpdate($hash);
+		RequestEarlyStartUpdate($hash);
+		RequestWeatherUpdate($hash);
+		RequestMobileDeviceUpdate($hash);
+		RequestAirComfortUpdate($hash);
+		RequestDeviceUpdate($hash);
+
+	}
+
+	if ($code eq 'Hi')
+	{
+    return WriteHiRequest2Tado ($hash, $zoneId, @params);
+	}
+
+	return undef;
+}
+
+sub WriteTemperature2Tado {
+
+    my ($hash, $zoneID, $duration, $temperature) = @_;
+    my $name = $hash->{NAME};
+
+    my $readTemplate = GetMessageTemplate( $hash, "setZoneTemperature", $zoneID );
+
+		my %message;
 		$message{'setting'}{'type'} = "HEATING";
 
 		if (defined $temperature){
@@ -2090,60 +2100,37 @@ sub Write ($$)
 
 		my $d = httpSimpleOperationOAuth( $hash , $readTemplate, 'PUT',  encode_json \%message  );
 		return undef;
-	}
+}
 
-	if ($code eq 'EarlyStart')
-	{
-		my $setting = $param1;
+sub WriteEarlyStart2Tado{
 
-		my $readTemplate = $url{"earlyStart"};
-		my $homeID = ReadingsVal ($name,"HomeID",undef);
-		$readTemplate =~ s/#HomeID#/$homeID/g;
-		$readTemplate =~ s/#ZoneID#/$zoneID/g;
+  my ($hash, $zoneID, $setting) = @_;
+  my $name = $hash->{NAME};
 
-		my %message ;
-		$message{'enabled'} = $setting;
+  my $readTemplate = GetMessageTemplate( $hash, "earlyStart", $zoneID );
 
-		my $d = httpSimpleOperationOAuth( $hash , $readTemplate, 'PUT' , encode_json \%message  );
+  my %message ;
+  $message{'enabled'} = $setting;
 
-		if (defined $d && ref($d) eq "HASH" && defined $d->{errors}){
-			return "Error: $d->{errors}[0]->{code} / $d->{errors}[0]->{title}";
-		}
-		return $d->{enabled};
-	}
+  my $d = httpSimpleOperationOAuth( $hash , $readTemplate, 'PUT' , encode_json \%message  );
 
-	if ($code =~ 'geoTrackingEnabled|onDemandLogRetrievalEnabled|specialOffersEnabled')
-	{
-		my $setting = $param1;
+  if (defined $d && ref($d) eq "HASH" && defined $d->{errors}){
+    return "Error: $d->{errors}[0]->{code} / $d->{errors}[0]->{title}";
+  }
+  return $d->{enabled};
+}
 
-		my $readTemplate = $url{"UpdateMobileDevice"};
-		my $homeID = ReadingsVal ($name,"HomeID",undef);
-		$readTemplate =~ s/#HomeID#/$homeID/g;
-		$readTemplate =~ s/#DeviceId#/$zoneID/g;
+sub WriteMobilePushNotificationSettings2Tado {
+
+    my $hash = shift;
+    my $zoneID = shift;
+    my $name = $hash->{NAME};
+
+    my $readTemplate = GetMessageTemplate( $hash, "UpdateMobileDevice", $zoneID );
 
 		my %message ;
-		$message{$code} = $setting;
-
-		my $d = httpSimpleOperationOAuth( $hash , $readTemplate, 'PUT' , encode_json \%message  );
-
-		if (defined $d && ref($d) eq "HASH" && defined $d->{errors}){
-			return "Error: $d->{errors}[0]->{code} / $d->{errors}[0]->{title}";
-		}
-        RequestMobileDeviceUpdate($hash);
-		return $d->{enabled};
-	}
-
-
-	if ($code eq 'pushNotifications')
-	{
-		my $readTemplate = $url{"UpdateMobileDevice"};
-		my $homeID = ReadingsVal ($name,"HomeID",undef);
-		$readTemplate =~ s/#HomeID#/$homeID/g;
-		$readTemplate =~ s/#DeviceId#/$zoneID/g;
-
-		my %message ;
-		$message{'pushNotifications'}->{'lowBatteryReminder'}  = $param1;
-		$message{'pushNotifications'}->{'awayModeReminder'}  = $param2;
+		$message{'pushNotifications'}->{'lowBatteryReminder'}  = shift;
+		$message{'pushNotifications'}->{'awayModeReminder'}  = shift;
 		$message{'pushNotifications'}->{'homeModeReminder'}  = shift;
 		$message{'pushNotifications'}->{'energySavingsReportReminder'}  = shift;
 		$message{'pushNotifications'}->{'openWindowReminder'}  = shift;
@@ -2159,37 +2146,69 @@ sub Write ($$)
 			return "Error: $d->{errors}[0]->{code} / $d->{errors}[0]->{title}";
 		}
 		return $d->{enabled};
-	}
-
-
-	if ($code eq 'Update')
-	{
-		RequestZoneUpdate($hash);
-		RequestEarlyStartUpdate($hash);
-		RequestWeatherUpdate($hash);
-		RequestMobileDeviceUpdate($hash);
-		RequestAirComfortUpdate($hash);
-
-		RequestDeviceUpdate($hash);
-
-	}
-
-	if ($code eq 'Hi')
-	{
-		my $readTemplate = $url{"identifyDevice"};
-		$readTemplate =~ s/#DeviceId#/$zoneID/g;
-
-		my $d = httpSimpleOperationOAuth( $hash , $readTemplate, 'POST'  );
-
-		if (defined $d && ref($d) eq "HASH" && defined $d->{errors}){
-			return "Error: $d->{errors}[0]->{code} / $d->{errors}[0]->{title}";
-		}
-		return $d->{enabled};
-	}
-
-	return undef;
 }
 
+sub WriteMobileSettings2Tado {
+  my ($hash, $zoneID, $code, $setting) = @_;
+  my $name = $hash->{NAME};
+
+  my $readTemplate = GetMessageTemplate( $hash, "UpdateMobileDevice", $zoneID );
+
+  my %message ;
+  $message{$code} = $setting;
+
+  my $d = httpSimpleOperationOAuth( $hash , $readTemplate, 'PUT' , encode_json \%message  );
+
+  if (defined $d && ref($d) eq "HASH" && defined $d->{errors}){
+    return "Error: $d->{errors}[0]->{code} / $d->{errors}[0]->{title}";
+  }
+  RequestMobileDeviceUpdate($hash);
+  return $d->{enabled};
+}
+
+sub WriteHiRequest2Tado {
+
+  my ($hash, $zoneID) = @_;
+  my $readTemplate = GetMessageTemplate( $hash, "identifyDevice", $zoneID );
+
+  my $d = httpSimpleOperationOAuth( $hash , $readTemplate, 'POST'  );
+
+  if (defined $d && ref($d) eq "HASH" && defined $d->{errors}){
+    return "Error: $d->{errors}[0]->{code} / $d->{errors}[0]->{title}";
+  }
+  return $d->{enabled};
+}
+
+sub WritePresenceStatus2Tado{
+
+	 my ($hash, $homeAwayStatus) = @_;
+	 my $name = $hash->{NAME};
+
+   my $readTemplate = GetMessageTemplate($hash, "setPresenceStatus" );
+		
+		my %message ;
+		$message{'homePresence'} = $homeAwayStatus;
+
+		my $d = httpSimpleOperationOAuth( $hash , $readTemplate, 'PUT',  encode_json \%message  );
+
+		RequestPresenceUpdate($hash);
+		return undef;
+}
+
+
+sub GetMessageTemplate {
+  my ($hash, $templateName, $zoneID) = @_;
+  my $name = $hash->{NAME};
+
+  my $messageTemplate = $url{$templateName};
+  my $homeID = ReadingsVal ($name,"HomeID",undef);
+
+  $messageTemplate =~ s/#HomeID#/$homeID/g;
+  $messageTemplate =~ s/#ZoneID#/$zoneID/g;
+  $messageTemplate =~ s/#DeviceId#/$zoneID/g;
+
+  return $messageTemplate;
+}
 
 
 sub Encrypt($)

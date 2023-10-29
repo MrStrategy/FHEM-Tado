@@ -238,8 +238,8 @@ sub Processing_Temperature {
 
 
 
-  WriteReading($hash, "open-window-plain-reading", $values[12]);
-  WriteReading($hash, "open-window-detected-plain-reading", $values[13]);
+  WriteBooleanReading($hash, "open-window-plain-reading", $values[12], 1);
+  WriteBooleanReading($hash, "open-window-detected-plain-reading", $values[13], 1);
   WriteReading($hash, "open-window", ($values[12] eq 'true' || $values[13] eq 'true') ? 'true' : 'false' );
 
 
@@ -437,13 +437,16 @@ sub WriteBooleanReading {
 	my $hash = shift;
 	my $readingName = shift;
 	my $readingValue = shift;
+  my $deleteIfNotSet = shift;
 
 	if( defined($readingValue) && !($readingValue eq '')) {
 		my $value = (int($readingValue) < 1) ? 'false' : 'true';
 		WriteReading($hash, $readingName, $value);
+	} elsif ($deleteIfNotSet) {
+    WriteReading($hash, $readingName, 'false');
 	} else {
-		readingsDelete($hash, $readingName);
-	}
+    readingsDelete($hash, $readingName);
+  }
 }
 
 sub WriteReading {
@@ -519,14 +522,25 @@ sub TadoDevice_Set($@)
 			return "Unknown argument $opt, choose one of " . $validValues; #join(" ", @cList);
 		}
 	} elsif (AttrVal($name, 'subType', 'nix') eq 'bridge') {
+
 		if(!defined($TadoDevice_bridge_sets{$opt})) {
 			my @cList = keys %TadoDevice_bridge_sets;
 			return "Unknown argument $opt, choose one of " . join(" ", @cList);
-		}
+    }
+
+	} elsif (AttrVal($name, 'subType', 'nix') eq 'heating') {
+
+  		if(!defined($TadoDevice_zone_sets{$opt})) {
+  			my @cList = keys %TadoDevice_zone_sets;
+  			return "Unknown argument $opt, choose one of " . join(" ", @cList);
+      }
+
 	} else  {
+
 		if(!defined($TadoDevice_thermostat_sets{$opt})) {
 			my @cList = keys %TadoDevice_thermostat_sets;
 			return "Unknown argument $opt, choose one of " . join(" ", @cList);
+
 		}
 	}
 
@@ -561,7 +575,6 @@ sub TadoDevice_Set($@)
 		}
 	}
 }
-
 
 sub TadoDevice_Attr(@)
 {
@@ -658,8 +671,6 @@ sub TadoDevice_Attr(@)
 
 	return undef;
 }
-
-
 
 sub TadoDevice_GenerateTemperatureSchema()
 {
