@@ -275,6 +275,17 @@ sub Processing_Temperature {
     readingsDelete($hash, "overlay-termination-remainingTimeInSeconds");
   }
 
+  if ($values[12] eq "true"){
+    WriteReading($hash, "open-window-detected-time", $values[28]) ;
+    WriteReading($hash, "open-window-duration-in-seconds", $values[29]);
+    WriteReading($hash, "open-window-expiry", $values[30]);
+  } else {
+    readingsDelete($hash, "open-window-detected-time" );
+    readingsDelete($hash, "open-window-duration-in-seconds");
+    readingsDelete($hash, "open-window-expiry");
+  }
+
+
   readingsEndUpdate($hash, 1);
 
 
@@ -303,6 +314,8 @@ sub Processing_Temperature {
   } else {
     readingsSingleUpdate($hash, 'state', "Device is in status '$values[11]'.", 1);
   }
+
+
 
 }
 

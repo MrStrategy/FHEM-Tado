@@ -1709,7 +1709,7 @@ sub UpdateZoneCallback($)
 		if (not defined $d->{openWindow}) {
 			$message .= "null;"
 		} else {
-			$message .= $d->{openWindow} . ";"
+      $message .= "true;"
 		}
 
     #open-window
@@ -1796,6 +1796,14 @@ sub UpdateZoneCallback($)
 		} else {
 				$message .= ";;;;;;;"
 		}
+
+    #open-window
+		if (defined $d->{openWindow}) {
+			$message .= $d->{openWindow}->{detectedTime}.";".$d->{openWindow}->{durationInSeconds}.";".$d->{openWindow}->{expiry}.";";
+		} else {
+      $message .= ";;;";
+		}
+
 
 		Log3 $name, 4, "$name: trying to dispatch message: $message";
 		my $found = Dispatch($hash, $message);
@@ -2061,7 +2069,7 @@ sub Write ($$)
 
 	if ($code eq 'Hi')
 	{
-    return WriteHiRequest2Tado ($hash, $zoneId, @params);
+    return WriteHiRequest2Tado ($hash, $zoneID, @params);
 	}
 
 	return undef;
@@ -2185,7 +2193,7 @@ sub WritePresenceStatus2Tado{
 	 my $name = $hash->{NAME};
 
    my $readTemplate = GetMessageTemplate($hash, "setPresenceStatus" );
-		
+
 		my %message ;
 		$message{'homePresence'} = $homeAwayStatus;
 
