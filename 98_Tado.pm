@@ -23,6 +23,7 @@ BEGIN {
           readingsEndUpdate
           readingsBulkUpdate
           readingsSingleUpdate
+		  readingsDelete
           readingFnAttributes
           InternalVal
           ReadingsVal
@@ -67,6 +68,7 @@ stop => " ",
 interval => " ",
 presence => " ",
 refreshToken  => " ",
+authenticate => " ",
 );
 
 my %homeAwayStatus = (
@@ -76,7 +78,10 @@ AWAY => " ",
 
 
 my  %url = (
-getOAuthToken          => 'https://auth.tado.com/oauth/token',
+startOAuthDeviceAuth   => 'https://login.tado.com/oauth2/device_authorize',
+getOAuthToken          => 'https://login.tado.com/oauth2/token',
+
+
 getZoneTemperature     => 'https://my.tado.com/api/v2/homes/#HomeID#/zones/#ZoneID#/state',
 setZoneTemperature     => 'https://my.tado.com/api/v2/homes/#HomeID#/zones/#ZoneID#/overlay',
 earlyStart             => 'https://my.tado.com/api/v2/homes/#HomeID#/zones/#ZoneID#/earlyStart',
@@ -96,9 +101,9 @@ getPresenceStatus      =>  'https://my.tado.com/api/v2/homes/#HomeID#/state',
 
 # OAuth Settings - Thanks to Philipp Wolfmajer (https://git.wolfmajer.at)
 my %oauth = (
-client_id     => 'public-api-preview',
+client_id     => '1bb50063-6b0c-4d11-bd99-387f4a91cc46',
 client_secret => '4HJGRffVR8xb3XdEUQpjgZ1VplJi6Xgw',
-scope         => 'home.user',
+scope         => 'offline_access',
 tokenFile     => "./FHEM/FhemUtils/Tado_token",
 );
 
@@ -185,9 +190,9 @@ sub Define($$)
 
 	readingsSingleUpdate($hash,'state','Undefined',0);
 
-  GenerateAttribute($name,"generateDevices","no");
-  GenerateAttribute($name,"generateMobileDevices","no");
-  GenerateAttribute($name,"generateWeather","no");
+	GenerateAttribute($name,"generateDevices","no");
+	GenerateAttribute($name,"generateMobileDevices","no");
+	GenerateAttribute($name,"generateWeather","no");
 
 	#Initial load of the homes
 	GetHomesAndDevices($hash);
@@ -196,10 +201,10 @@ sub Define($$)
 
 	#Call getZones with delay of 15 seconds, as all devices need to be loaded before timer triggers.
 	#Otherwise some error messages are generated due to auto created devices...
-	InternalTimer(gettimeofday()+15, "FHEM::Tado::GetZones", $hash) if (defined $hash);
+#	InternalTimer(gettimeofday()+15, "FHEM::Tado::GetZones", $hash) if (defined $hash);
 
 	Log3 $name, 1, sprintf("Define %s: Starting timer with interval %s", $name, InternalVal($name,'INTERVAL', undef));
-	InternalTimer(gettimeofday()+ InternalVal($name,'INTERVAL', undef), "FHEM::Tado::UpdateDueToTimer", $hash) if (defined $hash);
+#	InternalTimer(gettimeofday()+ InternalVal($name,'INTERVAL', undef), "FHEM::Tado::UpdateDueToTimer", $hash) if (defined $hash);
 	return undef;
 }
 
@@ -256,6 +261,54 @@ sub LoadToken {
         }
         return $Token if $Token;
 }
+
+
+
+sub NewOAuthDevice {
+    my $hash          = shift;
+    my $name          = $hash->{NAME};
+
+	my $data = {
+        client_id     => $oauth{client_id},
+        scope         => $oauth{scope},
+    };
+
+    my $param = {
+        url     => $url{startOAuthDeviceAuth},
+        method  => 'POST',
+        timeout => 5,
+        hash    => $hash,
+        data    => $data
+    };
+
+  my ( $err, $returnData ) = HttpUtils_BlockingGet($param);
+
+    if ( $err ne "" ) {
+        Log3 $name, 3,
+            "Tado $name" . ": "
+          . "NewTokenRequest: Error while requesting "
+          . $param->{url}
+          . " - $err";
+    }
+    elsif ( $returnData ne "" ) {	
+
+		Log3 $name, 5, "url " . $param->{url} . " returned: $returnData";
+        my $decoded_data = eval { decode_json($returnData) };
+
+		$hash->{AUTH_DEVICE_CODE} = $decoded_data->{'device_code'};
+		$hash->{AUTH_INTERVAL} = $decoded_data->{'interval'};
+
+		my $url = $decoded_data->{'verification_uri_complete'};
+
+		readingsSingleUpdate($hash,'device_auth_url',"$url",1);
+        readingsSingleUpdate($hash,'state',"Please continue in browser: $url",1);
+
+		InternalTimer(gettimeofday()+ $hash->{AUTH_INTERVAL}, "FHEM::Tado::UpdateAuthTimer", $hash);
+
+	}
+	
+}
+
 
 sub NewTokenRequest {
     my $hash          = shift;
@@ -333,8 +386,6 @@ sub TokenRefresh {
 
     my $data = {
         client_id     => $oauth{client_id},
-        client_secret => $oauth{client_secret},
-        scope         => $oauth{scope},
         grant_type    => 'refresh_token',
         refresh_token => $Token->{'refresh_token'}
     };
@@ -519,7 +570,14 @@ sub Set($@)
 
 	if(!defined($sets{$opt})) {
 		my @cList = keys %sets;
-		return "Unknown argument $opt, choose one of refreshToken start stop interval presence:HOME,AWAY";
+		return "Unknown argument $opt, choose one of authenticate refreshToken start stop interval presence:HOME,AWAY";
+	}
+
+	if ($opt eq "authenticate")	{
+ 		Log3 $name, 3, "Tado: set $name: processing ($opt)";
+         NewOAuthDevice($hash);
+         Log3 $name, 3, "Tado $name" . ": " . "$opt finished\n";
+		 return undef;
 	}
 
 	if ($opt eq "start")	{
@@ -1886,6 +1944,85 @@ sub UpdateAirComfortCallback($)
 		return undef;
 	}
 }
+
+
+sub UpdateAuthTimer($)
+{
+	my ($hash) = @_;
+	my $name = $hash->{NAME};
+
+	my $data = {
+        client_id     => $oauth{client_id},
+		device_code   => $hash->{AUTH_DEVICE_CODE},
+        grant_type    => "urn:ietf:params:oauth:grant-type:device_code"
+    };
+
+    my $param = {
+        url     => $url{getOAuthToken},
+        method  => 'POST',
+        timeout => 5,
+        hash    => $hash,
+        data    => $data
+    };
+
+  my ( $err, $returnData ) = HttpUtils_BlockingGet($param);
+
+    if ( $err ne "" ) {
+        Log3 $name, 3,
+            "Tado $name" . ": "
+          . "NewTokenRequest: Error while requesting "
+          . $param->{url}
+          . " - $err";
+    }
+    elsif ( $returnData ne "" ) {	
+
+		Log3 $name, 5, "url " . $param->{url} . " returned: $returnData";
+        my $decoded_data = eval { decode_json($returnData) };
+
+
+		if (defined($decoded_data) && defined($decoded_data->{'access_token'})) {
+            $hash->{'.TOKEN'} = $decoded_data;
+			$hash->{TOKEN_LIFETIME} = gettimeofday() + $decoded_data->{'expires_in'};
+			$hash->{TOKEN_LIFETIME_HR} = localtime( $hash->{TOKEN_LIFETIME} );
+			Log3 $name, 5,
+				"Tado $name" . ": "
+				. "Retrived new authentication token successfully. Valid until "
+				. localtime( $hash->{TOKEN_LIFETIME} );
+			$hash->{STATE} = "reachable";
+
+			readingsDelete ($hash, "device_auth_url");
+			delete $hash->{AUTH_DEVICE_CODE};
+			delete $hash->{AUTH_INTERVAL};
+
+			$hash->{LOCAL} = 1;
+			UpdateDueToTimer($hash);
+			delete $hash->{LOCAL};
+
+
+
+			#start the normal timer
+			RemoveInternalTimer($hash);
+			InternalTimer(gettimeofday()+InternalVal($name,'INTERVAL', undef), "FHEM::Tado::UpdateDueToTimer", $hash);
+			readingsSingleUpdate($hash,'state','Polling',0);
+
+			return $decoded_data;
+		}
+
+	}
+
+	#local allows call of function without adding new timer.
+	#must be set before call ($hash->{LOCAL} = 1) and removed after (delete $hash->{LOCAL};)
+	#You just get here if the call did not sucessfully return data Then you need to loop the auth timer.
+	if(!$hash->{LOCAL}) {
+		RemoveInternalTimer($hash);
+		InternalTimer(gettimeofday()+InternalVal($name,'INTERVAL', undef), "FHEM::Tado::UpdateAuthTimer", $hash);
+		readingsSingleUpdate($hash,'state','Polling Auth',0);
+	}
+
+}
+
+
+
 
 sub UpdateDueToTimer($)
 {

@@ -452,7 +452,12 @@ sub WriteBooleanReading {
 	my $readingValue = shift;
   my $deleteIfNotSet = shift;
 
-	if( defined($readingValue) && !($readingValue eq '')) {
+  if ($readingValue =~ /true|false/) {
+    WriteReading($hash, $readingName, $readingValue);
+    return;
+	}
+
+	if( defined($readingValue) && !($readingValue eq '')  && !($readingValue eq 'null')) {
 		my $value = (int($readingValue) < 1) ? 'false' : 'true';
 		WriteReading($hash, $readingName, $value);
 	} elsif ($deleteIfNotSet) {
