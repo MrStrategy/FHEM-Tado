@@ -67,7 +67,6 @@ start	=> " ",
 stop => " ",
 interval => " ",
 presence => " ",
-refreshToken  => " ",
 authenticate => " ",
 );
 
@@ -102,9 +101,7 @@ getPresenceStatus      =>  'https://my.tado.com/api/v2/homes/#HomeID#/state',
 # OAuth Settings - Thanks to Philipp Wolfmajer (https://git.wolfmajer.at)
 my %oauth = (
 client_id     => '1bb50063-6b0c-4d11-bd99-387f4a91cc46',
-client_secret => '4HJGRffVR8xb3XdEUQpjgZ1VplJi6Xgw',
 scope         => 'offline_access',
-tokenFile     => "./FHEM/FhemUtils/Tado_token",
 );
 
 sub Initialize
@@ -122,12 +119,34 @@ sub Initialize
 	$hash->{MatchList} = { '1:TadoDevice'  => '^Tado;.*'};
 	$hash->{AttrList} =
 	'generateDevices:yes,no '
-	.	'generateMobileDevices:yes,no '
+	. 'generateMobileDevices:yes,no '
 	. 'generateWeather:yes,no '
 	. $readingFnAttributes;
 
 	Log 3, "Tado module initialized.";
 	return;
+}
+
+sub Setup{
+
+	my ($hash) = @_;
+	my $name = $hash->{NAME};
+	RemoveInternalTimer($hash);
+
+	#Initial load of the homes
+	if(CanAuthenticate2Tado($hash)){
+		GetHomesAndDevices($hash);
+		#Call getZones with delay of 15 seconds, as all devices need to be loaded before timer triggers.
+		#Otherwise some error messages are generated due to auto created devices...
+		InternalTimer(gettimeofday()+15, "FHEM::Tado::GetZones", $hash) if (defined $hash);		
+		Log3 $name, 1, sprintf("Define %s: Starting timer with interval %s", $name, InternalVal($name,'INTERVAL', undef));
+		InternalTimer(gettimeofday()+ InternalVal($name,'INTERVAL', undef), "FHEM::Tado::UpdateDueToTimer", $hash) if (defined $hash);
+		return undef;		
+	} else {
+		my $message = "No valid token found. Please authenticate first.";
+		Log3 $name, 1, "Define $name: $message";
+		readingsSingleUpdate($hash, "state", $message, 0);
+	}
 }
 
 
@@ -141,45 +160,42 @@ sub Define($$)
 
 	my $errmsg = '';
 
-	# Check parameter(s) - Must be min 4 in total (counts strings not purly parameter, interval is optional)
-	if( int(@param) < 4 ) {
-		$errmsg = return "syntax error: define <name> Tado <username> <password> [Interval]";
+	
+	# Check parameter(s) - Must be min 2 in total (counts strings not purly parameter, interval is optional)
+	if( int(@param) < 2 ) {
+		$errmsg = return "syntax error: define <name> Tado [Interval]";
 		Log3 $name, 1, "Tado $name: " . $errmsg;
 		return $errmsg;
 	}
 
-	#Check if the username is an email address
-	if ( $param[2] =~ /^.+@.+$/ ) {
-		my $username = $param[2];
-		$hash->{Username} = $username;
-	} else {
-		$errmsg = "specify valid email address within the field username. Format: define <name> Tado <username> <password> [interval]";
+	# Handle old definition before auth refactoring'
+	delete $hash->{Password};
+	if (int(@param) >= 4 && int(@param) <= 5) {
+		$errmsg = "Modul was defined before auth refactoring. Please remove user and password from definition.";
 		Log3 $name, 1, "Tado $name: " . $errmsg;
-		return $errmsg;
+		if(int(@param) == 5) {
+			$param[2] = $param[5];
+			Log3 $name, 1, "Tado $name: interval will be set to " . $param[2];
+		} else {
+			$param[2] = 60;
+		}
 	}
 
-	#Take password and use custom encryption.
-	# Encryption is taken from fitbit / withings module
-	my $password = Encrypt($param[3]);
 
-	$hash->{Password} = $password;
-
-	if (defined $param[4]) {
-		$hash->{DEF} = sprintf("%s %s %s", InternalVal($name,'Username', undef), $password, $param[4]);
-	} else {
-		$hash->{DEF} = sprintf("%s %s", InternalVal($name,'Username', undef) ,$password);
-	}
+	if (defined $param[2]) {
+		$hash->{DEF} = sprintf("%s", $param[2]);
+	} 
 
 	#Check if interval is set and numeric.
 	#If not set -> set to 60 seconds
 	#If less then 5 seconds set to 5
 	#If not an integer abort with failure.
 	my $interval = 60;
-	if (defined $param[4]) {
-		if ( $param[4] =~ /^\d+$/ ) {
-			$interval = $param[4];
+	if (defined $param[2]) {
+		if ( $param[2] =~ /^\d+$/ ) {
+			$interval = $param[2];
 		} else {
-			$errmsg = "Specify valid integer value for interval. Whole numbers > 5 only. Format: define <name> Tado <username> <password> [interval]";
+			$errmsg = "Specify valid integer value for interval. Whole numbers > 5 only. Format: define <name> Tado [interval]";
 			Log3 $name, 1, "Tado $name: " . $errmsg;
 			return $errmsg;
 		}
@@ -194,19 +210,11 @@ sub Define($$)
 	GenerateAttribute($name,"generateMobileDevices","no");
 	GenerateAttribute($name,"generateWeather","no");
 
-	#Initial load of the homes
-	GetHomesAndDevices($hash);
-
-	RemoveInternalTimer($hash);
-
-	#Call getZones with delay of 15 seconds, as all devices need to be loaded before timer triggers.
-	#Otherwise some error messages are generated due to auto created devices...
-#	InternalTimer(gettimeofday()+15, "FHEM::Tado::GetZones", $hash) if (defined $hash);
-
-	Log3 $name, 1, sprintf("Define %s: Starting timer with interval %s", $name, InternalVal($name,'INTERVAL', undef));
-#	InternalTimer(gettimeofday()+ InternalVal($name,'INTERVAL', undef), "FHEM::Tado::UpdateDueToTimer", $hash) if (defined $hash);
-	return undef;
+	Setup($hash);
+	return undef
 }
+
+
 
 
 #Generate a new attribute if it is not existing yet
@@ -236,30 +244,30 @@ sub LoadToken {
 
    	$Token = $hash->{'.TOKEN'} ;
 
-        if ( $@ || $tokenLifeTime < gettimeofday() ) {
-            Log3 $name, 5,
-              "Tado $name" . ": "
-              . "Error while loading: $@ ,requesting new one"
-              if $@;
-            Log3 $name, 5,
-              "Tado $name" . ": " . "Token is expired, requesting new one"
-              if $tokenLifeTime < gettimeofday();
-            $Token = NewTokenRequest($hash);
-        }
-        else {
-            Log3 $name, 5,
-                "Tado $name" . ": "
-              . "Token expires at "
-              . localtime($tokenLifeTime);
+		# Error while loading
+		if ($@) {
+			Log3 $name, 5,
+			  "Tado $name" . ": "
+			  . "Error while loading: $@. Please authenticate again.";
+			return undef;
+		}
+		# Refresh token expires after 30 days
+		elsif ( $tokenLifeTime < gettimeofday() - 60 * 60 * 24 * 30 ) {
+			Log3 $name, 1,
+				"Tado $name" . ": "
+			  . "Token expired 30 days ago. Refresh token is invalid. Please authenticate again. "
+			  . localtime($tokenLifeTime);
+			return undef;
+		}
+		# Token almost expired or expired
+		elsif ( $tokenLifeTime < gettimeofday() - 5 ) {
+			Log3 $name, 5,
+			  "Tado $name" . ": " . "Token is expired, requesting new one"
+			  if $tokenLifeTime < gettimeofday() - 5 ;
+			$Token = TokenRefresh($hash);
+		}
 
-            # if token is about to expire, refresh him
-            if ( ( $tokenLifeTime - 45 ) < gettimeofday() ) {
-                Log3 $name, 5,
-                  "Tado $name" . ": " . "Token will expire soon, refreshing";
-                $Token = TokenRefresh($hash);
-            }
-        }
-        return $Token if $Token;
+		return $Token if $Token;
 }
 
 
@@ -309,71 +317,21 @@ sub NewOAuthDevice {
 	
 }
 
+sub CanAuthenticate2Tado {
+	my $hash          = shift;
+	my $name          = $hash->{NAME};
 
-sub NewTokenRequest {
-    my $hash          = shift;
-    my $name          = $hash->{NAME};
-	my $password =  Decrypt(InternalVal($name,'Password', undef));
-	my $username =  InternalVal($name,'Username', undef);
+    # load token
+	my $Token = $hash->{'.TOKEN'};
 
-    Log3 $name, 5, "Tado $name" . ": " . "calling NewTokenRequest()";
-
-    my $data = {
-        client_id     =>  $oauth{client_id},
-        client_secret => $oauth{client_secret},
-        username      => $username,
-        password      => $password,
-        scope         => $oauth{scope},
-        grant_type    => 'password'
-    };
-
-    my $param = {
-        url     => $url{getOAuthToken},
-        method  => 'POST',
-        timeout => 5,
-        hash    => $hash,
-        data    => $data
-    };
-
-    #Log3 $name, 5, 'Blocking GET: ' . Dumper($param);
-    #Log3 $name, $reqDebug, "Tado $name" . ": " . "Request $AuthURL";
-    my ( $err, $returnData ) = HttpUtils_BlockingGet($param);
-
-    if ( $err ne "" ) {
-        Log3 $name, 3,
-            "Tado $name" . ": "
-          . "NewTokenRequest: Error while requesting "
-          . $param->{url}
-          . " - $err";
-    }
-    elsif ( $returnData ne "" ) {
-        Log3 $name, 5, "url " . $param->{url} . " returned: $returnData";
-        my $decoded_data = eval { decode_json($returnData) };
-        if ($@) {
-            Log3 $name, 3, "Tado $name" . ": "
-              . "NewTokenRequest: decode_json failed, invalid json. error: $@ ";
-        }
-        else {
-            #write token data in hash
-			 if (defined($decoded_data)){
-              $hash->{'.TOKEN'} = $decoded_data;
-            }
-
-            # token lifetime management
-            if (defined($decoded_data)){
-              $hash->{TOKEN_LIFETIME} = gettimeofday() + $decoded_data->{'expires_in'};
-            }
-            $hash->{TOKEN_LIFETIME_HR} = localtime( $hash->{TOKEN_LIFETIME} );
-            Log3 $name, 5,
-                "Tado $name" . ": "
-              . "Retrived new authentication token successfully. Valid until "
-              . localtime( $hash->{TOKEN_LIFETIME} );
-            $hash->{STATE} = "reachable";
-            return $decoded_data;
-        }
-    }
-    return;
+	if ( defined $Token && defined $Token->{'access_token'} && defined $Token->{'refresh_token'} && $hash->{TOKEN_LIFETIME} > gettimeofday() - 60 * 60 * 24 * 30 ) {
+		return 1;
+	}
+	else {
+		return 0;
+	}
 }
+
 
 sub TokenRefresh {
     my $hash          = shift;
@@ -570,7 +528,7 @@ sub Set($@)
 
 	if(!defined($sets{$opt})) {
 		my @cList = keys %sets;
-		return "Unknown argument $opt, choose one of authenticate refreshToken start stop interval presence:HOME,AWAY";
+		return "Unknown argument $opt, choose one of authenticate start stop interval presence:HOME,AWAY";
 	}
 
 	if ($opt eq "authenticate")	{
@@ -594,12 +552,7 @@ sub Set($@)
 		Log3 $name, 1, sprintf("Set %s: Updated readings and started timer to automatically update readings with interval %s", $name, InternalVal($name,'INTERVAL', undef));
 
 
-	}    elsif ( $opt eq 'refreshToken' ) {
-         Log3 $name, 3, "Tado: set $name: processing ($opt)";
-         LoadToken($hash);
-         Log3 $name, 3, "Tado $name" . ": " . "$opt finished\n";
-     }
-
+	}    
 
 	elsif ($opt eq "stop"){
 
@@ -618,6 +571,7 @@ sub Set($@)
 		Log3 $name, 1, "Set $name: Set interval to" . $interval;
 
 		$hash->{INTERVAL} = $interval;
+
 	} elsif ($opt eq "presence"){
 
 
@@ -1994,15 +1948,9 @@ sub UpdateAuthTimer($)
 			delete $hash->{AUTH_DEVICE_CODE};
 			delete $hash->{AUTH_INTERVAL};
 
-			$hash->{LOCAL} = 1;
-			UpdateDueToTimer($hash);
-			delete $hash->{LOCAL};
 
-
-
-			#start the normal timer
 			RemoveInternalTimer($hash);
-			InternalTimer(gettimeofday()+InternalVal($name,'INTERVAL', undef), "FHEM::Tado::UpdateDueToTimer", $hash);
+			Setup($hash);
 			readingsSingleUpdate($hash,'state','Polling',0);
 
 			return $decoded_data;
