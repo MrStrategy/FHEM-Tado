@@ -385,7 +385,7 @@ sub _refreshToken {
             #write token data in file
 			 if (defined($decoded_data)){
 				$hash->{'.TOKEN'} = $decoded_data;
-				setKeyValue($name."_RefreshToken", $decoded_data->{'refresh_token'});
+				setKeyValue($name."_RefreshToken", $decoded_data->{'refresh_token'}) if length($decoded_data->{'refresh_token'}) > 10;
 				Log3 $name, 1,
 					"Tado Updated persistent refresh token:" . $decoded_data->{'refresh_token'};
 			 }
@@ -488,7 +488,7 @@ sub UpdateAuthTimer($)
 
 		if (defined($decoded_data) && defined($decoded_data->{'access_token'})) {
             $hash->{'.TOKEN'} = $decoded_data;
-			setKeyValue($name."_RefreshToken", $decoded_data->{'refresh_token'});
+			setKeyValue($name."_RefreshToken", $decoded_data->{'refresh_token'}) if length($decoded_data->{'refresh_token'}) > 10;
 			$hash->{TOKEN_LIFETIME} = gettimeofday() + $decoded_data->{'expires_in'};
 			$hash->{TOKEN_LIFETIME_HR} = localtime( $hash->{TOKEN_LIFETIME} );
 			Log3 $name, 5,
@@ -516,7 +516,7 @@ sub UpdateAuthTimer($)
 	#You just get here if the call did not sucessfully return data Then you need to loop the auth timer.
 	if(!$hash->{LOCAL}) {
 		RemoveInternalTimer($hash);
-		InternalTimer(gettimeofday()+InternalVal($name,'INTERVAL', undef), "FHEM::Tado::UpdateAuthTimer", $hash);
+		InternalTimer(gettimeofday()+ $hash->{AUTH_INTERVAL}, "FHEM::Tado::UpdateAuthTimer", $hash);
 		readingsSingleUpdate($hash,'state','Polling Auth',0);
 	}
 
