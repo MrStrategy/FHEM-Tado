@@ -17,30 +17,31 @@ BEGIN {
     # Import from main context
     GP_Import(
         qw(
-          Log3
-					Log
-          readingsBeginUpdate
-          readingsEndUpdate
-          readingsBulkUpdate
-          readingsSingleUpdate
-		  readingsDelete
-          readingFnAttributes
-          InternalVal
-          ReadingsVal
-          RemoveInternalTimer
-          InternalTimer
-          HttpUtils_NonblockingGet
-          HttpUtils_BlockingGet
-          gettimeofday
-          getUniqueId
-          Attr
-					AttrVal
-					CommandAttr
-					CommandDefine
-					Dispatch
-					makeDeviceName
-					modules
-          )
+		Log3
+		Log
+		readingsBeginUpdate
+		readingsEndUpdate
+		readingsBulkUpdate
+		readingsSingleUpdate
+		readingsDelete
+		readingFnAttributes
+		InternalVal
+		ReadingsVal
+		RemoveInternalTimer
+		InternalTimer
+		HttpUtils_NonblockingGet
+		HttpUtils_BlockingGet
+		gettimeofday
+		getUniqueId
+		Attr
+		AttrVal
+		CommandAttr
+		CommandDefine
+		Dispatch
+		makeDeviceName
+		modules
+		setKeyValue
+		getKeyValue)
     );
 }
 
@@ -57,9 +58,6 @@ my %gets = (
 update => " ",
 home	=> " ",
 zones	=> " ",
-devices  => " ",
-mobile_devices  => " ",
-weather => " "
 );
 
 my %sets = (
@@ -91,18 +89,70 @@ UpdateMobileDevice     => 'https://my.tado.com/api/v2/homes/#HomeID#/mobileDevic
 getHomeDetails         =>  'https://my.tado.com/api/v2/homes/#HomeID#',
 getWeather             =>  'https://my.tado.com/api/v2/homes/#HomeID#/weather',
 getDevices             =>  'https://my.tado.com/api/v2/homes/#HomeID#/devices',
-identifyDevice    		 =>  'https://my.tado.com/api/v2/devices/#DeviceId#/identify',
+identifyDevice    	   =>  'https://my.tado.com/api/v2/devices/#DeviceId#/identify',
 getAirComfort          =>  'https://my.tado.com/api/v2/homes/#HomeID#/airComfort',
 setPresenceStatus      =>  'https://my.tado.com/api/v2/homes/#HomeID#/presenceLock',
 getPresenceStatus      =>  'https://my.tado.com/api/v2/homes/#HomeID#/state',
 );
 
 
-# OAuth Settings - Thanks to Philipp Wolfmajer (https://git.wolfmajer.at)
+
+my %dpoints = (
+    getZoneTemperature => {
+        url      => 'homes/#HomeID#/zones/#ZoneID#/state',
+    },
+    setZoneTemperature => {
+        url      => 'homes/#HomeID#/zones/#ZoneID#/overlay',
+    },
+    getEarlyStart => {
+        url      => 'homes/#HomeID#/zones/#ZoneID#/earlyStart',
+    },
+    getZones => {
+        url      => 'homes/#HomeID#/zones',
+    },
+    getHomeId => {
+        url      => 'me',
+    },
+    getMobileDevices => {
+        url      => 'homes/#HomeID#/mobileDevices',
+        attribute => 'generateMobileDevices',
+    },
+    UpdateMobileDevice => {
+        url      => 'homes/#HomeID#/mobileDevices/#DeviceId#/settings',
+        attribute => 'generateMobileDevices',
+    },
+    getHomeDetails => {
+        url      => 'homes/#HomeID#',
+    },
+    getWeather => {
+        url      => 'homes/#HomeID#/weather',
+        attribute => 'generateWeather',
+    },
+    getDevices => {
+        url      => 'homes/#HomeID#/devices',
+        attribute => 'generateDevices',
+    },
+    identifyDevice => {
+        url      => 'devices/#DeviceId#/identify',
+        attribute => 'generateDevices',
+    },
+    getAirComfort => {
+        url      => 'homes/#HomeID#/airComfort',
+    },
+    setPresenceStatus => {
+        url      => 'homes/#HomeID#/presenceLock',
+    },
+    getPresenceStatus => {
+        url      => 'homes/#HomeID#/state',
+    },
+);
+
+
 my %oauth = (
 client_id     => '1bb50063-6b0c-4d11-bd99-387f4a91cc46',
 scope         => 'offline_access',
 );
+
 
 sub Initialize
 {
@@ -129,13 +179,14 @@ sub Initialize
 
 sub Setup{
 
+	
 	my ($hash) = @_;
 	my $name = $hash->{NAME};
 	RemoveInternalTimer($hash);
 
 	#Initial load of the homes
 	if(CanAuthenticate2Tado($hash)){
-		GetHomesAndDevices($hash);
+		WriteToCloudAPI( $hash, 'getHomeId', 'GET', undef);		
 		#Call getZones with delay of 15 seconds, as all devices need to be loaded before timer triggers.
 		#Otherwise some error messages are generated due to auto created devices...
 		InternalTimer(gettimeofday()+15, "FHEM::Tado::GetZones", $hash) if (defined $hash);		
@@ -175,11 +226,13 @@ sub Define($$)
 		Log3 $name, 1, "Tado $name: " . $errmsg;
 		if(int(@param) == 5) {
 			$param[2] = $param[5];
-			Log3 $name, 1, "Tado $name: interval will be set to " . $param[2];
 		} else {
 			$param[2] = 60;
 		}
 	}
+
+	$hash->{APIURI} = 'https://my.tado.com/api/v2/';
+	Log3 $name, 1, "Tado $name: Set APIURI to hash";
 
 
 	if (defined $param[2]) {
@@ -215,8 +268,6 @@ sub Define($$)
 }
 
 
-
-
 #Generate a new attribute if it is not existing yet
 sub GenerateAttribute {
   my ($name, $attributeName, $value) = @_;
@@ -235,7 +286,7 @@ sub Undef($$)
 
 
 
-sub LoadToken {
+sub _loadToken {
     my $hash          = shift;
     my $name          = $hash->{NAME};
     my $tokenLifeTime = $hash->{TOKEN_LIFETIME};
@@ -244,35 +295,119 @@ sub LoadToken {
 
    	$Token = $hash->{'.TOKEN'} ;
 
-		# Error while loading
-		if ($@) {
-			Log3 $name, 5,
-			  "Tado $name" . ": "
-			  . "Error while loading: $@. Please authenticate again.";
-			return undef;
-		}
-		# Refresh token expires after 30 days
-		elsif ( $tokenLifeTime < gettimeofday() - 60 * 60 * 24 * 30 ) {
-			Log3 $name, 1,
-				"Tado $name" . ": "
-			  . "Token expired 30 days ago. Refresh token is invalid. Please authenticate again. "
-			  . localtime($tokenLifeTime);
-			return undef;
-		}
-		# Token almost expired or expired
-		elsif ( $tokenLifeTime < gettimeofday() - 5 ) {
-			Log3 $name, 5,
-			  "Tado $name" . ": " . "Token is expired, requesting new one"
-			  if $tokenLifeTime < gettimeofday() - 5 ;
-			$Token = TokenRefresh($hash);
-		}
+	# Error while loading
+	if ($@) {
+		Log3 $name, 5,
+			"Tado $name" . ": "
+			. "Error while loading: $@. Please authenticate again.";
+		return undef;
+	}
 
-		return $Token if $Token;
+	# Token exists & is Valid
+	if ( defined $Token && defined $Token->{'access_token'}  && $tokenLifeTime > gettimeofday() + 90 ) {
+		return $Token;
+	}
+
+
+	# Token almost expired or expired - refresh it
+	elsif ( $tokenLifeTime < gettimeofday() + 90 ) {
+		Log3 $name, 5, "Tado $name" . ": " . "Token is expiring or expired, requesting new one";
+		$Token = _refreshToken($hash);
+	}
+
+	# Refresh token required. Try refreshing
+	else {
+		_refreshToken($hash);
+	}
+
+	return $Token if $Token;
+}
+
+sub _refreshToken {
+    my $hash          = shift;
+    my $name          = $hash->{NAME};
+
+    my $Token         = undef;
+	my $err,
+	my $refreshToken;
+    # load token
+    $Token = $hash->{'.TOKEN'};
+
+
+	# No token loaded	
+	if ( !defined $Token ) {
+		Log3 $name, 1,
+			"Tado $name" . ": "
+			. "No token loaded. Getting latest refresh token from storage.";
+		($err, $refreshToken) = getKeyValue($name."_RefreshToken");
+	} else {
+		$refreshToken = $Token->{'refresh_token'};
+	}
+
+
+    my $data = {
+        client_id     => $oauth{client_id},
+        grant_type    => 'refresh_token',
+        refresh_token => $refreshToken
+    };
+
+    my $param = {
+        url     => $url{getOAuthToken},
+        method  => 'POST',
+        timeout => 5,
+        hash    => $hash,
+        data    => $data
+    };
+
+    my ( $err, $returnData ) = HttpUtils_BlockingGet($param);
+
+    if ( $err ne "" ) {
+        Log3 $name, 3,
+            "Tado $name" . ": "
+          . "TokenRefresh: Error in token retrival while requesting "
+          . $param->{url}
+          . " - $err";
+        $hash->{STATE} = "error";
+    }
+
+    elsif ( $returnData ne "" ) {
+        Log3 $name, 5, "url " . $param->{url} . " returned: $returnData";
+        my $decoded_data = eval { decode_json($returnData); };
+
+        if ($@) {
+            Log3 $name, 3,
+              "Tado $name" . ": "
+              . "TokenRefresh: decode_json failed, invalid json. error:$@\n"
+              if $@;
+            $hash->{STATE} = "error";
+        }
+        else {
+            #write token data in file
+			 if (defined($decoded_data)){
+				$hash->{'.TOKEN'} = $decoded_data;
+				setKeyValue($name."_RefreshToken", $decoded_data->{'refresh_token'});
+				Log3 $name, 1,
+					"Tado Updated persistent refresh token:" . $decoded_data->{'refresh_token'};
+			 }
+
+
+            # token lifetime management
+            $hash->{TOKEN_LIFETIME} =
+              gettimeofday() + $decoded_data->{'expires_in'};
+            $hash->{TOKEN_LIFETIME_HR} = localtime( $hash->{TOKEN_LIFETIME} );
+            Log3 $name, 5,
+                "Tado $name" . ": "
+              . "TokenRefresh: Refreshed authentication token successfully. Valid until "
+              . localtime( $hash->{TOKEN_LIFETIME} );
+            $hash->{STATE} = "reachable";
+            return $decoded_data;
+        }
+    }
+    return;
 }
 
 
-
-sub NewOAuthDevice {
+sub RegisterOAuthDevice {
     my $hash          = shift;
     my $name          = $hash->{NAME};
 
@@ -317,35 +452,15 @@ sub NewOAuthDevice {
 	
 }
 
-sub CanAuthenticate2Tado {
-	my $hash          = shift;
-	my $name          = $hash->{NAME};
+sub UpdateAuthTimer($)
+{
+	my ($hash) = @_;
+	my $name = $hash->{NAME};
 
-    # load token
-	my $Token = $hash->{'.TOKEN'};
-
-	if ( defined $Token && defined $Token->{'access_token'} && defined $Token->{'refresh_token'} && $hash->{TOKEN_LIFETIME} > gettimeofday() - 60 * 60 * 24 * 30 ) {
-		return 1;
-	}
-	else {
-		return 0;
-	}
-}
-
-
-sub TokenRefresh {
-    my $hash          = shift;
-    my $name          = $hash->{NAME};
-
-    my $Token         = undef;
-
-    # load token
-    $Token = $hash->{'.TOKEN'};
-
-    my $data = {
+	my $data = {
         client_id     => $oauth{client_id},
-        grant_type    => 'refresh_token',
-        refresh_token => $Token->{'refresh_token'}
+		device_code   => $hash->{AUTH_DEVICE_CODE},
+        grant_type    => "urn:ietf:params:oauth:grant-type:device_code"
     };
 
     my $param = {
@@ -356,51 +471,79 @@ sub TokenRefresh {
         data    => $data
     };
 
-    #Log3 $name, 5, 'Blocking GET TokenRefresh: ' . Dumper($param);
-    #Log3 $name, $reqDebug, "Tado $name" . ": " . "Request $AuthURL";
-    my ( $err, $returnData ) = HttpUtils_BlockingGet($param);
+  my ( $err, $returnData ) = HttpUtils_BlockingGet($param);
 
     if ( $err ne "" ) {
         Log3 $name, 3,
             "Tado $name" . ": "
-          . "TokenRefresh: Error in token retrival while requesting "
+          . "NewTokenRequest: Error while requesting "
           . $param->{url}
           . " - $err";
-        $hash->{STATE} = "error";
     }
+    elsif ( $returnData ne "" ) {	
 
-    elsif ( $returnData ne "" ) {
-        Log3 $name, 5, "url " . $param->{url} . " returned: $returnData";
-        my $decoded_data = eval { decode_json($returnData); };
+		Log3 $name, 5, "url " . $param->{url} . " returned: $returnData";
+        my $decoded_data = eval { decode_json($returnData) };
 
-        if ($@) {
-            Log3 $name, 3,
-              "Tado $name" . ": "
-              . "TokenRefresh: decode_json failed, invalid json. error:$@\n"
-              if $@;
-            $hash->{STATE} = "error";
-        }
-        else {
-            #write token data in file
-			 if (defined($decoded_data)){
-              $hash->{'.TOKEN'} = $decoded_data;
 
-            }
+		if (defined($decoded_data) && defined($decoded_data->{'access_token'})) {
+            $hash->{'.TOKEN'} = $decoded_data;
+			setKeyValue($name."_RefreshToken", $decoded_data->{'refresh_token'});
+			$hash->{TOKEN_LIFETIME} = gettimeofday() + $decoded_data->{'expires_in'};
+			$hash->{TOKEN_LIFETIME_HR} = localtime( $hash->{TOKEN_LIFETIME} );
+			Log3 $name, 5,
+				"Tado $name" . ": "
+				. "Retrived new authentication token successfully. Valid until "
+				. localtime( $hash->{TOKEN_LIFETIME} );
+			$hash->{STATE} = "reachable";
 
-            # token lifetime management
-            $hash->{TOKEN_LIFETIME} =
-              gettimeofday() + $decoded_data->{'expires_in'};
-            $hash->{TOKEN_LIFETIME_HR} = localtime( $hash->{TOKEN_LIFETIME} );
-            Log3 $name, 5,
-                "Tado $name" . ": "
-              . "TokenRefresh: Refreshed authentication token successfully. Valid until "
-              . localtime( $hash->{TOKEN_LIFETIME} );
-            $hash->{STATE} = "reachable";
-            return $decoded_data;
-        }
-    }
-    return;
+			readingsDelete ($hash, "device_auth_url");
+			delete $hash->{AUTH_DEVICE_CODE};
+			delete $hash->{AUTH_INTERVAL};
+
+
+			RemoveInternalTimer($hash);
+			Setup($hash);
+			readingsSingleUpdate($hash,'state','Polling',0);
+
+			return $decoded_data;
+		}
+
+	}
+
+	#local allows call of function without adding new timer.
+	#must be set before call ($hash->{LOCAL} = 1) and removed after (delete $hash->{LOCAL};)
+	#You just get here if the call did not sucessfully return data Then you need to loop the auth timer.
+	if(!$hash->{LOCAL}) {
+		RemoveInternalTimer($hash);
+		InternalTimer(gettimeofday()+InternalVal($name,'INTERVAL', undef), "FHEM::Tado::UpdateAuthTimer", $hash);
+		readingsSingleUpdate($hash,'state','Polling Auth',0);
+	}
+
 }
+
+sub CanAuthenticate2Tado {
+	my $hash          = shift;
+	my $name          = $hash->{NAME};
+
+    # load token
+	my $Token = $hash->{'.TOKEN'};
+
+	if ( defined $Token && defined $Token->{'access_token'} && defined $Token->{'refresh_token'} && $hash->{TOKEN_LIFETIME} > gettimeofday() - 60 * 60 * 24 * 30 ) {
+		return 1;
+	}
+	else 
+	{
+		my ($err, $refreshToken) = getKeyValue($name."_RefreshToken");
+		if (defined $refreshToken) {
+			$Token = $hash->{'.TOKEN'}->{'refresh_token'} = $refreshToken;
+			return 1;
+		}	
+		return 0;
+	}
+}
+
+
 
 
 sub httpSimpleOperationOAuth($$$;$)
@@ -408,9 +551,7 @@ sub httpSimpleOperationOAuth($$$;$)
 	my ($hash,$url, $operation, $message) = @_;
 	my ($json,$err,$data,$decoded);
 	my $name = $hash->{NAME};
-	my $CurrentTokenData = LoadToken($hash);
-
-    Log3 $name, 3, "$CurrentTokenData->{'token_type'} $CurrentTokenData->{'access_token'}";
+	my $CurrentTokenData = _loadToken($hash);
 
 	my $request = {
 		url           => $url,
@@ -470,44 +611,25 @@ sub Get($@)
 
 	if($opt eq "home"){
 
-		return GetHomesAndDevices($hash);
+		return WriteToCloudAPI( $hash, 'getHomeId', 'GET' );
 
 	} elsif($opt eq "zones") {
 
-		return GetZones($hash);
-
-	}  elsif($opt eq "devices") {
-
-		return GetDevices($hash);
-
-	}  elsif($opt eq "mobile_devices") {
-
-		return GetMobileDevices($hash);
+		return WriteToCloudAPI( $hash, 'getZones', 'GET', undef);	
 
 	}  elsif($opt eq "update")  {
 
 		Log3 $name, 3, "Get $name: Updating readings for all zones";
 		$hash->{LOCAL} = 1;
-		RequestZoneUpdate($hash);
-		RequestWeatherUpdate($hash);
-		RequestMobileDeviceUpdate($hash);
-		RequestAirComfortUpdate($hash);
-		RequestDeviceUpdate($hash);
-	  RequestPresenceUpdate($hash);
+		GetZoneTemperatures($hash);
+		WriteToCloudAPI( $hash, 'getWeather', 'GET', undef);
+		WriteToCloudAPI( $hash, 'getMobileDevices', 'GET', undef);
+		WriteToCloudAPI( $hash, 'getAirComfort', 'GET', undef);
+		WriteToCloudAPI( $hash, 'getDevices', 'GET', undef);
+		WriteToCloudAPI( $hash, 'getPresenceStatus', 'GET', undef);
 
 		delete $hash->{LOCAL};
 		return undef;
-
-  }  elsif($opt eq "airComfortUpdate")  {
-
-		$hash->{LOCAL} = 1;
-		RequestAirComfortUpdate($hash);
-		delete $hash->{LOCAL};
-
-	}  elsif($opt eq "weather")  {
-
-		Log3 $name, 3, "Get $name: Getting weather";
-		return DefineWeatherChannel($hash);
 
 	}  else	{
 
@@ -515,7 +637,6 @@ sub Get($@)
 		return "Unknown v2 argument $opt, choose one of " . join(" ", @cList);
 	}
 }
-
 
 sub Set($@)
 {
@@ -533,7 +654,7 @@ sub Set($@)
 
 	if ($opt eq "authenticate")	{
  		Log3 $name, 3, "Tado: set $name: processing ($opt)";
-         NewOAuthDevice($hash);
+         RegisterOAuthDevice($hash);
          Log3 $name, 3, "Tado $name" . ": " . "$opt finished\n";
 		 return undef;
 	}
@@ -544,7 +665,7 @@ sub Set($@)
 		RemoveInternalTimer($hash);
 
 		$hash->{LOCAL} = 1;
-		RequestZoneUpdate($hash);
+		GetZoneTemperatures($hash);
 		delete $hash->{LOCAL};
 
 		InternalTimer(gettimeofday()+ InternalVal($name,'INTERVAL', undef), "FHEM::Tado::UpdateDueToTimer", $hash);
@@ -592,386 +713,562 @@ sub Set($@)
 
 }
 
-
-
 sub Attr(@)
 {
 	return undef;
 }
 
-sub GetHomesAndDevices($)
+
+
+#This function is called by the timer to update the readings after creation.
+sub GetZones($)
 {
 	my ($hash) = @_;
 	my $name = $hash->{NAME};
 
-	if (not defined $hash){
-		my $msg = "Error on GetHomesAndDevices. Missing hash variable";
-		Log3 $name, 1, $msg;
-		return $msg;
+	WriteToCloudAPI( $hash, 'getZones', 'GET', undef);		
+	return undef;
+}
+
+sub GetZoneTemperatures{
+	my ($hash) = @_;
+	my $name = $hash->{NAME};
+
+	foreach my $zone (split /, /,  InternalVal($name,'ZoneIDs', undef)) {
+		WriteToCloudAPI( $hash, 'getZoneTemperature', 'GET', undef, $zone);
 	}
+}
 
-	my $readTemplate = $url{"getHomeId"};
-	my $d = httpSimpleOperationOAuth( $hash , $readTemplate, 'GET' );
 
-	if (defined $d && ref($d) eq "HASH" && defined $d->{errors}){
 
-		readingsSingleUpdate($hash,'state',"Error: $d->{errors}[0]->{code} / $d->{errors}[0]->{title}",1);
+sub CanExecuteCloudAPICommand {
+    my ($hash, $dpoint) = @_;
+    my $name = $hash->{NAME};
+
+    if (exists $dpoints{$dpoint}) {
+        my $attribute = $dpoints{$dpoint}->{attribute};
+        if (defined $attribute) {
+            my $isEnabled = AttrVal($name, $attribute, 'yes');
+            if ($isEnabled eq 'no') {
+                my $msg = "Attribute '$attribute' is set to 'no'. Command for '$dpoint' will not be executed.";
+                Log3 $name, 4, $msg;
+                return (0, $msg);
+            }
+        }
+    }
+
+    # Executable if no attribute is defined or attribute is set to 'yes'
+    return (1, undef);
+}
+
+
+sub WriteToCloudAPI {
+	my ($hash, $dpoint, $method, $message, $extraId) = @_;
+    my $name = $hash->{NAME};
+    my $url  = $hash->{APIURI} . $dpoints{$dpoint}->{url};
+    my $payload;
+
+    $payload = encode_json \%$message if defined $message;
+
+
+    my ($canExecute, $msg) = CanExecuteCloudAPICommand($hash, $dpoint);
+    return $msg unless $canExecute;
+
+
+    if ( not defined $hash ) {
+        my $msg =
+          "Error on Tado_WriteToCloudAPI. Missing hash variable";
+        Log3 'Tado', 1, $msg;
+        return $msg;
+    }
+
+    #Check if HomeID is required in URL and replace or alert.
+    if ( $url =~ m/\#HomeID\#/x )
+    {
+        my $homeID = ReadingsVal ($name,"HomeID",undef);
+        if ( not defined $homeID ) {
+            my $error =	"Error on Tado_WriteToCloudAPI. Missing HomeID. Please define Home first..";
+            Log3 $name, 1, $error;
+            return $error;
+        }
+        $url =~ s/#HomeID#/$homeID/g;
+    }
+
+
+    #Check if ZoneID is required in URL and replace or alert.
+    if ( $url =~ m/\#ZoneID\#/x )
+    {
+        if ( not defined $extraId ) {
+            my $error =	"Error on Tado_WriteToCloudAPI. Missing ZoneID in call. Either zones are not defined or this is a coding fault.";
+            Log3 $name, 1, $error;
+            return $error;
+        }
+        $url =~ s/#ZoneID#/$extraId/g;
+    }
+
+    #Check if DeviceId is required in URL and replace or alert.
+    if ( $url =~ m/\#DeviceID\#/x )
+    {
+        if ( not defined $extraId ) {
+            my $error =	"Error on Tado_WriteToCloudAPI. Missing DeviceID in call. Either zones are not defined or this is a coding fault.";
+            Log3 $name, 1, $error;
+            return $error;
+        }
+        $url =~ s/#DeviceID#/$extraId/g;
+    }
+
+    my $CurrentTokenData = _loadToken($hash);
+    my $header           = {
+        "Content-Type" => "application/json;charset=UTF-8",
+        "Authorization" =>
+          "$CurrentTokenData->{'token_type'} $CurrentTokenData->{'access_token'}"
+    };
+
+    HttpUtils_NonblockingGet(
+        {
+            url                => $url,
+            timeout            => 15,
+            incrementalTimeout => 1,
+            hash               => $hash,
+            dpoint             => $dpoint,
+			extra_id		   => $extraId,
+            data               => $payload,
+            method             => $method,
+            header             => $header,
+            callback           => \&ResponseHandling
+        }
+    );
+    return;
+
+}
+
+
+sub ResponseHandling {
+    my $param = shift;
+    my $err   = shift;
+    my $data  = shift;
+    my $hash  = $param->{hash};
+    my $name  = $hash->{NAME};
+    my $decoded_json;
+    my $value;
+
+    Log3 $name, 4, "Callback received. " . $param->{url};
+	Log3 $name, 4, "FHEM -> Tado: " . $param->{message} if (defined $param->{message});
+	Log3 $name, 4, "Tado -> FHEM: " . $data;
+
+	#function call error
+	if ( $err ne "" ) {
+        Log3 $name, 1,
+            "error while requesting "
+          . $param->{url}
+          . " - $err";
+        readingsSingleUpdate( $hash, "lastResponse", "ERROR $err", 1 );
+        return;
+    }
+
+	eval { $decoded_json = decode_json($data) }; 
+
+	#message content error
+	if (defined $decoded_json && ref($decoded_json) eq "HASH" && defined $decoded_json->{errors}){
+		log 1, Dumper $decoded_json;
+		readingsSingleUpdate($hash,'state',"Error: $decoded_json->{errors}[0]->{code} / $decoded_json->{errors}[0]->{title}",0);
 		return undef;
+	}	
 
-	} else {
+	if ($param->{dpoint} eq 'getHomeId'){
+		
+		my $saveDeviceName = makeDeviceName($decoded_json->{homes}[0]->{name});
+		readingsSingleUpdate($hash, "HomeID", $decoded_json->{homes}[0]->{id}, 1);
+		readingsSingleUpdate($hash, "HomeName", $saveDeviceName, 1 );
 
-		my $saveDeviceName = makeDeviceName($d->{homes}[0]->{name});
-		readingsBeginUpdate($hash);
-		readingsBulkUpdate($hash, "HomeID", $d->{homes}[0]->{id} );
-		readingsBulkUpdate($hash, "HomeName", $saveDeviceName );
-		readingsEndUpdate($hash, 1);
-
-		Log3 $name, 1, "New Tado Home defined. Id: $d->{homes}[0]->{id} Name: $saveDeviceName";
+		Log3 $name, 1, "Defined / Updated HomeId for device '$name'. Id: $decoded_json->{homes}[0]->{id} Name: $saveDeviceName";
 
 		# This code should not be called, as TADO states in the FAQ they're currently just supporting one single home.
-		if (scalar (@{$d->{homes}}) > 1 ){
-			$saveDeviceName = makeDeviceName($d->{homes}[1]->{name});
-			readingsBeginUpdate($hash);
-			readingsBulkUpdate($hash, "HomeID_2", $d->{homes}[1]->{id} );
-			readingsBulkUpdate($hash, "HomeName_2",  $saveDeviceName);
-			readingsEndUpdate($hash, 1);
+		if (scalar (@{$decoded_json->{homes}}) > 1 ){
+			$saveDeviceName = makeDeviceName($decoded_json->{homes}[1]->{name});
+			readingsSingleUpdate($hash, "HomeID_2", $decoded_json->{homes}[1]->{id}, 1 );
+			readingsSingleUpdate($hash, "HomeName_2",  $saveDeviceName, 1);
 
-			Log3 $name, 1, "New Tado Home defined. Id: $d->{homes}[1]->{id} Name: $saveDeviceName";
+			Log3 $name, 1, "Attention!! Additional HomeId defined for device '$name'. This is officially not supported by Tado. Id: $decoded_json->{homes}[1]->{id} Name: $saveDeviceName";
 		}
 
 		readingsSingleUpdate($hash,'state','Initialized',0);
 		return undef;
 	}
 
-}
-
-sub GetZones($)
-{
-
-	my ($hash) = @_;
-	my $name = $hash->{NAME};
-
-	if (not defined $hash){
-		my $msg = "Error on GetZones. Missing hash variable";
-		Log3 $name, 1, $msg;
-		return $msg;
-	}
-
-	my $homeID = ReadingsVal ($name,"HomeID",undef);
-	if (not defined $homeID) {
-		my $msg = "Error on GetZones. Missing HomeID. Please define Home first.";
-		Log3 $name, 1, $msg;
-		return $msg;
-	}
-
-	my $readTemplate = $url{"getZoneDetails"};
-
-	$readTemplate =~ s/#HomeID#/$homeID/g;
-
-	my $d = httpSimpleOperationOAuth( $hash , $readTemplate, 'GET'  );
-
-	if (defined $d && ref($d) eq "HASH" && defined $d->{errors}){
-		log 1, Dumper $d;
-		readingsSingleUpdate($hash,"Error: $d->{errors}[0]->{code} / $d->{errors}[0]->{title}",'Undefined',1);
+	if ( $param->{dpoint} eq 'getZoneTemperature' ) {
+		Processing_Dpoint_GetZoneTemperature( $hash, $decoded_json, $param->{extra_id} );
 		return undef;
+	}
 
-	} else {
+	if ( $param->{dpoint} eq 'getZones'){
+		Processing_Dpoint_GetZones( $hash, $decoded_json );
+		return undef;
+	}
 
-		readingsBeginUpdate($hash);
 
-		my $ZoneCount = 0;
+	if ( $param->{dpoint} eq 'getEarlyStart' ) {
+		my $message = "Tado;$param->{extra_id};earlyStart;$decoded_json->{enabled}";
 
-		my %ZoneIds = ();
+		_dispatchMessage($hash, $message);
+		return undef;
+	}
 
-		for my $item( @{$d} ){
+	if ($param->{dpoint} eq 'getWeather') {
 
-			$ZoneCount += 1;
-			readingsBulkUpdate($hash, "ZoneCount", $ZoneCount);
-			Log3 $name, 4, "GetZones ($name): zonecount is $ZoneCount";
+		_autocreateWeatherChannel($hash, $decoded_json);
 
-			my $deviceName = makeDeviceName($item->{name});
+		my $message = "Tado;weather;weather;"
+		. $decoded_json->{solarIntensity}->{percentage} . ";"
+		. $decoded_json->{solarIntensity}->{timestamp} . ";"
+		. $decoded_json->{outsideTemperature}->{celsius} . ";"
+		. $decoded_json->{outsideTemperature}->{timestamp} . ";"
+		. $decoded_json->{weatherState}->{value} . ";"
+		. $decoded_json->{weatherState}->{timestamp};
 
-			if (not exists $ZoneIds{$item->{id}})
-			{
-				$ZoneIds{$item->{id}} = $deviceName;
-			}
+		_dispatchMessage($hash, $message);
 
-			Log3 $name, 4, "While updating zones (displays variable): ".Dumper \%ZoneIds;
+		readingsSingleUpdate($hash, "LastUpdate_Weather", localtime, 1 );
+		return undef;
+	}
 
-			readingsBulkUpdate($hash, "Zone_" . $item->{id} . "_Name"  ,  $deviceName );
+	if ($param->{dpoint} eq 'getDevices') {
+		
+		for my $item( @{$decoded_json} ){
 
-			my $code = $name ."-". $item->{id};
+			_autocreateDevice($hash, $item);
 
-			if( defined($modules{TadoDevice}{defptr}{$code}) ) {
+      		my $deviceId = "$item->{serialNo}";
+			my $message = "Tado;$deviceId;devicedata;";
 
-				Log3 $name, 5, "$name: id '$item->{id}' already defined as '$modules{TadoDevice}{defptr}{$code}->{NAME}'";
+			$message .= join(";",
+				_getValue($item, '{currentFwVersion}'),
+				_getValue($item, '{inPairingMode}'),
+				_getValue($item, '{batteryState}'),
+				_getValue($item, '{connectionState}->{value}'),
+				_getValue($item, '{connectionState}->{timestamp}'),
+			). ";";
 
-			} else {
-
-				my $deviceName = "Tado_" . makeDeviceName($item->{name});
-				$deviceName =~ s/ /_/g;
-				my $define= "$deviceName TadoDevice $item->{id} IODev=$name";
-
-				Log3 $name, 1, "GetZones ($name): create new device '$deviceName' for zone '$item->{id}'";
-
-				my $cmdret= CommandDefine(undef,$define);
-
-				if(defined $cmdret) {
-					if( not index($cmdret, 'already defined') != -1) {
-						Log3 $name, 1, "$name: Autocreate: An error occurred while creating device for id '$item->{id}': $cmdret";
-					}
-				} else {
-					CommandAttr(undef,"$deviceName room Tado");
-					CommandAttr(undef,"$deviceName subType zone");
-				}
-
-			}
-
-			#Independent if the device was created or not all internals of the device must be Updated
-			my $deviceHash = $modules{TadoDevice}{defptr}{$code};
-			$deviceHash->{originalName} = $item->{name};
-			$deviceHash->{TadoType} = $item->{Type};
-
- 		 if	(length $item->{dateCreated}) {
-				readingsSingleUpdate($deviceHash, "date_created"  , $item->{dateCreated} , 1);
-			}
-
- 		 if	(length $item->{supportsDazzle}) {
-			 	readingsSingleUpdate($deviceHash, "supports_dazzle"  , $item->{supportsDazzle}, 1 );
-			}
-
+			_dispatchMessage($hash, $message);
 		}
 
-		$hash->{ZoneIDs} = join(", ", keys %ZoneIds);
-		Log3 $name, 3, "After Updating zones: ".Dumper InternalVal($name,'ZoneIDs', undef);
-		#Log3 $name, 1, "Hashdump: ".Dumper $hash;
-		readingsEndUpdate($hash, 1);
+		readingsSingleUpdate ($hash, "LastUpdate_Devices", localtime, 1 );
 		return undef;
-
 	}
+
+	if ($param->{dpoint} eq 'getMobileDevices'){
+		Processing_Dpoint_GetMobileDevices($hash, $decoded_json);
+		return undef;
+	}
+
+	if ($param->{dpoint} eq 'getPresenceStatus'){
+		readingsSingleUpdate($hash, "Presence", $decoded_json->{presence}, 1);
+		return undef;
+	}
+
+	if ($param->{dpoint} eq 'getAirComfort'){
+
+		readingsSingleUpdate($hash, "airComfort_freshness", $decoded_json->{freshness}->{value}, 1 );
+		readingsSingleUpdate($hash, "airComfort_lastWindowOpen", $decoded_json->{freshness}->{lastOpenWindow}, 1 );
+
+		foreach my $values (@{$decoded_json->{comfort}})
+		{
+     		Log3 $name, 4, "Trying to decode message: ". Dumper($values);
+			my $message = "Tado;$values->{roomId};airComfort;";
+
+
+		 	$message .= $values->{temperatureLevel} . ";"
+					. $values->{humidityLevel} . ";"
+					. $values->{coordinate}->{radial} . ";"
+					. $values->{coordinate}->{angular} . ";";
+
+			_dispatchMessage($hash, $message);
+		}
+
+		readingsSingleUpdate($hash, "LastUpdate_AirComfort", localtime, 1 );
+		return undef;
+	}
+
+
 
 }
 
-sub GetDevices($)
-{
 
-	my ($hash) = @_;
-	my $name = $hash->{NAME};
+sub _dispatchMessage {
+	my $hash    = shift;
+	my $message = shift;
+	my $name    = $hash->{NAME};
 
-
-	my $isEnabled = AttrVal($name, 'generateDevices', 'yes');
-	if ($isEnabled eq 'no') {
-		my $msg = "Attribute 'generateDevices' is set to no. Command will not be executed.";
-		Log3 $name, 1, $msg;
-		return $msg;
-	}
-
-
-	my $homeID = ReadingsVal ($name,"HomeID",undef);
-	if (not defined $homeID) {
-		my $msg = "Error on GetDevices. Missing HomeID. Please define Home first.";
-		Log3 $name, 1, $msg;
-		return $msg;
-	}
-
-	my $readTemplate = $url{"getDevices"};
-	$readTemplate =~ s/#HomeID#/$homeID/g;
-
-	my $d = httpSimpleOperationOAuth( $hash , $readTemplate, 'GET'  );
-
-	if (defined $d && ref($d) eq "HASH" && defined $d->{errors}){
-		log 1, Dumper $d;
-		readingsSingleUpdate($hash,'state',"Error: $d->{errors}[0]->{code} / $d->{errors}[0]->{title}",1);
-		return undef;
-
-	} else {
-
-
-		readingsBeginUpdate($hash);
-
-
-		my $count = 0;
-
-		for my $item( @{$d} ){
-			$count++;
-			readingsBulkUpdate($hash, "DeviceCount", $count);
-
-			my $code = $name ."-". $item->{serialNo};
-
-			if( defined($modules{TadoDevice}{defptr}{$code}) )
-			{
-				Log3 $name, 5, "GetDevices ($name): device id '$item->{serialNo}' already defined as '$modules{TadoDevice}{defptr}{$code}->{NAME}'";
-			} else {
-
-				my $deviceName = "Tado_" . $item->{serialNo};
-				$deviceName =~ s/ /_/g;
-				my $define= "$deviceName TadoDevice $item->{serialNo} IODev=$name";
-
-				Log3 $name, 1, "GetDevices ($name): create new device '$deviceName' of type '$item->{deviceType}'";
-
-				my $cmdret= CommandDefine(undef,$define);
-
-				if(defined $cmdret) {
-					if( not index($cmdret, 'already defined') != -1) {
-						Log3 $name, 1, "$name: Autocreate: An error occurred while creating device for id '$item->{id}': $cmdret";
-					}
-				} else {
-
-					my $deviceHash = $modules{TadoDevice}{defptr}{$code};
-
-					CommandAttr(undef,"$deviceName room Tado");
-					if ($item->{deviceType} eq 'IB01'){
-						CommandAttr(undef,"$deviceName subType bridge");
-						$deviceHash->{deviceType} = $item->{deviceType};
-						$deviceHash->{serialNo} = $item->{serialNo};
-						$deviceHash->{shortSerialNo} = $item->{shortSerialNo};
-						$deviceHash->{capabilities} = join(' ', $item->{characteristics}->{capabilities});
-					} else {
-						CommandAttr(undef,"$deviceName subType thermostat");
-						$deviceHash->{deviceType} = $item->{deviceType};
-						$deviceHash->{serialNo} = $item->{serialNo};
-						$deviceHash->{shortSerialNo} = $item->{shortSerialNo};
-						$deviceHash->{capabilities} = join(' ', $item->{characteristics}->{capabilities});
-					}
-				}
-			}
-		}
-		readingsEndUpdate($hash, 1);
-		return undef;
-	}
-
-	RequestDeviceUpdate($hash);
-
+	Log3 $name, 4, "Trying to dispatch message: $message";
+	my $found = Dispatch($hash, $message);
+	Log3 $name, 4, "Tried to dispatch message. Result: $found";
+	return $found;
 }
 
-sub GetMobileDevices($)
-{
+sub _getValue {
+	my ($base, $path) = @_;
+	my $val = eval "\$base->$path";
+	return defined $val ? $val : "";
+}
 
-	my ($hash) = @_;
-	my $name = $hash->{NAME};
 
-	my $isEnabled = AttrVal($name, 'generateMobileDevices', 'yes');
-	if ($isEnabled eq 'no') {
-		my $msg = "Attribute 'generateMobileDevices' is set to no. Command 'getMobileDevices' cannot be executed.";
-		Log3 $name, 1, $msg;
-		return $msg;
-	}
+sub Processing_Dpoint_GetZoneTemperature {
+    my $hash         = shift;
+    my $decode_json = shift;
+	my $zoneID = shift;
+    my $name = $hash->{NAME};
 
-	my $homeID = ReadingsVal ($name,"HomeID",undef);
-	if (not defined $homeID) {
-		my $msg = "Error on GetEarlyStart. Missing HomeID. Please define Home first.";
-		Log3 $name, 1, $msg;
-		return $msg;
-	}
+    Log3 $name, 5, 'Evaluating GetZoneTemperature';
 
-	my $readTemplate = $url{"getMobileDevices"};
-	$readTemplate =~ s/#HomeID#/$homeID/g;
-	my $d = httpSimpleOperationOAuth( $hash , $readTemplate, 'GET'  );
+	my $message = "Tado;$zoneID;temp;";
 
-	if (defined $d && ref($d) eq "HASH" && defined $d->{errors}){
-		log 1, Dumper $d;
-		readingsSingleUpdate($hash,'state',"Error: $d->{errors}[0]->{code} / $d->{errors}[0]->{title}",1);
-		return undef;
+	#measured-temp-*
+	$message .= join(";",
+			_getValue($decode_json, '{sensorDataPoints}->{insideTemperature}->{celsius}'),
+			_getValue($decode_json, '{sensorDataPoints}->{insideTemperature}->{timestamp}'),
+			_getValue($decode_json, '{sensorDataPoints}->{insideTemperature}->{fahrenheit}'),
+			_getValue($decode_json, '{sensorDataPoints}->{insideTemperature}->{precision}->{celsius}'),
+			_getValue($decode_json, '{sensorDataPoints}->{insideTemperature}->{precision}->{fahrenheit}'),
+		). ";";
 
+
+	# desired temperature or OFF
+	$message .= $decode_json->{setting}->{power} eq "OFF"
+		? "OFF;"
+		: _getValue($decode_json, '{setting}->{temperature}->{celsius}') . ";";
+
+
+	$message .= join(";",
+		_getValue($decode_json, '{sensorDataPoints}->{humidity}->{percentage}'),
+		_getValue($decode_json, '{sensorDataPoints}->{humidity}->{timestamp}'),
+		_getValue($decode_json, '{link}->{state}'),
+		defined $decode_json->{openWindow} ? "true" : "null",
+		defined $decode_json->{openWindowDetected} ? $decode_json->{openWindowDetected} : "false",
+		_getValue($decode_json, '{activityDataPoints}->{heatingPower}->{percentage}'),
+		_getValue($decode_json, '{activityDataPoints}->{heatingPower}->{timestamp}')
+	) . ";";
+
+	if (defined $decode_json->{nextScheduleChange}) {
+		$message .= join(";", 
+			_getValue($decode_json, '{nextScheduleChange}->{setting}->{temperature}->{celsius}'),
+			_getValue($decode_json, '{nextScheduleChange}->{setting}->{power}'),
+			_getValue($decode_json, '{nextScheduleChange}->{start}')
+		) . ";";
 	} else {
+		$message .= ";;;";
+	}	
 
+	$message .= (defined $decode_json->{tadoMode} ? $decode_json->{tadoMode} : "null") . ";";
 
-		readingsBeginUpdate($hash);
+	my $overlay = defined $decode_json->{overlay} ? 1 : 0;
+	$message .= "$overlay;";
 
-		my %MobileDeviceIds = ();
+	if ($overlay) {
+		$message .= join(";", 
+			$decode_json->{overlay}->{type},
+			$decode_json->{overlay}->{setting}->{power},
+			($decode_json->{overlay}->{setting}->{power} ne 'OFF' 
+				? $decode_json->{overlay}->{setting}->{temperature}->{celsius} 
+				: 'OFF'),
+			$decode_json->{overlay}->{termination}->{type}
+		) . ";";
 
-		my $count = 0;
-		for my $item( @{$d} ){
-			$count++;
-			readingsBulkUpdate($hash, "MobileDeviceCount", $count);
-
-			readingsBulkUpdate($hash, "MobileDevice_".$item->{id} , $item->{name});
-
-			Log3 $name, 2, "GetMobileDevices: Adding mobile device with id '$item->{id}' and name (with unsave characters) '$item->{name}'";
-
-			if (not exists $MobileDeviceIds{$item->{id}})
-			{
-				$MobileDeviceIds{$item->{id}} = $item->{name};
-			}
-
-			my $code = $name ."-". $item->{id};
-
-			if( defined($modules{TadoDevice}{defptr}{$code}) )
-			{
-				Log3 $name, 5, "GetMobileDevices ($name): mobiledevice id '$item->{id}' already defined as '$modules{TadoDevice}{defptr}{$code}->{NAME}'";
-			} else {
-
-				my $deviceName = "Tado_" . $item->{name};
-				$deviceName =~ s/ /_/g;
-				my $define= "$deviceName TadoDevice $item->{id} IODev=$name";
-
-				Log3 $name, 1, "GetMobileDevices ($name): create new device '$deviceName'";
-
-				my $cmdret= CommandDefine(undef,$define);
-
-				if(defined $cmdret) {
-					if( not index($cmdret, 'already defined') != -1) {
-						Log3 $name, 1, "$name: Autocreate: An error occurred while creating device for id '$item->{name}': $cmdret";
-					}
-				} else {
-
-					my $deviceHash = $modules{TadoDevice}{defptr}{$code};
-
-					CommandAttr(undef,"$deviceName room Tado");
-					CommandAttr(undef,"$deviceName subType mobile_device");
-					$deviceHash->{device_platform} = $item->{deviceMetadata}->{platform};
-					$deviceHash->{device_osVersion} = $item->{deviceMetadata}->{osVersion};
-					$deviceHash->{device_locale} = $item->{deviceMetadata}->{locale};
-					$deviceHash->{device_model} = $item->{deviceMetadata}->{model};
-
-				}
-			}
+		if ($decode_json->{overlay}->{termination}->{type} ne 'MANUAL') {
+			$message .= join(";", 
+				_getValue($decode_json, '{overlay}->{termination}->{durationInSeconds}'),
+				_getValue($decode_json, '{overlay}->{termination}->{expiry}'),
+				_getValue($decode_json, '{overlay}->{termination}->{remainingTimeInSeconds}')
+			) . ";";
+		} else {
+			$message .= ";;;";
 		}
-
-		$hash->{MobileDeviceIDs} = join(", ", keys %MobileDeviceIds);
-		Log3 $name, 3, "After Updating mobile device ids: ".Dumper InternalVal($name,'ZoneIds', undef);
-
+	} else {
+		$message .= ";;;;;;;";
 	}
 
+	if (defined $decode_json->{openWindow}) {
+		$message .= join(";", 
+			_getValue($decode_json, '{openWindow}->{detectedTime}'),
+			_getValue($decode_json, '{openWindow}->{durationInSeconds}'),
+			_getValue($decode_json, '{openWindow}->{expiry}')
+		) . ";";
+	} else {
+		$message .= ";;;";
+	}
 
-	readingsEndUpdate($hash, 1);
-	RequestMobileDeviceUpdate($hash);
+	_dispatchMessage($hash, $message);
+
+	readingsSingleUpdate($hash, "LastUpdate_Zones", localtime, 1);
 	return undef;
 }
 
-sub DefineWeatherChannel($)
-{
-	my ($hash) = @_;
-	my $name = $hash->{NAME};
+sub Processing_Dpoint_GetMobileDevices {
+    my $hash         = shift;
+    my $d 			 = shift;
+    my $name         = $hash->{NAME};
 
-	if (not defined $hash){
-		my $msg = "Error on DefineWeatherChannel. Missing hash variable";
-		Log3 $name, 1, $msg;
-		return $msg;
+    Log3 $name, 5, 'Evaluating GetMobileDevices';
 
+	my %MobileDeviceIds = ();
+	my $count = 0;
+
+	for my $item (@{$d}) {
+
+		_autocreateMobileDevice($hash, $item);
+		$MobileDeviceIds{$item->{id}} = $item->{name};
+
+		my $message = "Tado;$item->{id};locationdata;" 
+			. $item->{settings}->{geoTrackingEnabled} . ";";
+
+		if ($item->{settings}->{geoTrackingEnabled}) {
+			$message .= join(";", 
+				_getValue($item,'{location}->{stale}'),
+				_getValue($item,'{location}->{atHome}'),
+				_getValue($item,'{location}->{bearingFromHome}->{degrees}'),
+				_getValue($item,'{location}->{bearingFromHome}->{radians}'),
+				_getValue($item,'{location}->{relativeDistanceFromHomeFence}')
+			) . ";";
+		} else {
+			$message .= ";;;;;";
+		}
+
+		if (defined $item->{settings}->{pushNotifications}) {
+			$message .= join(";", 
+				_getValue($item,'{settings}->{pushNotifications}->{lowBatteryReminder}'),
+				_getValue($item,'{settings}->{pushNotifications}->{awayModeReminder}'),
+				_getValue($item,'{settings}->{pushNotifications}->{homeModeReminder}'),
+				_getValue($item,'{settings}->{pushNotifications}->{openWindowReminder}'),
+				_getValue($item,'{settings}->{pushNotifications}->{energySavingsReportReminder}'),
+				_getValue($item,'{settings}->{pushNotifications}->{incidentDetection}'),
+				_getValue($item,'{settings}->{pushNotifications}->{energyIqReminder}')
+			) . ";";
+		} else {
+			$message .= ";;;;;;;";
+		}
+
+		if (defined $item->{deviceMetadata}) {
+			$message .= join(";", 
+				_getValue($item,'{deviceMetadata}->{platform}'),
+				_getValue($item,'{deviceMetadata}->{osVersion}'),
+				_getValue($item,'{deviceMetadata}->{model}'),
+				_getValue($item,'{deviceMetadata}->{locale}')
+			) . ";";
+		} else {
+			$message .= ";;;;";
+		}
+
+		$message .= join(";", 
+			_getValue($item,'{settings}->{specialOffersEnabled}'),
+			_getValue($item,'{settings}->{onDemandLogRetrievalEnabled}')
+		) . ";";
+
+		_dispatchMessage($hash, $message);
 	}
 
-	my $homeID = ReadingsVal ($name,"HomeID",undef);
-	if (not defined $homeID){
-		my $msg = "Error on DefineWeatherChannel. Missing HomeID. Please define Home first.";
-		Log3 $name, 1, $msg;
-		return $msg;
+	$hash->{MobileDeviceIDs} = join(", ", keys %MobileDeviceIds);
+	readingsSingleUpdate($hash, "LastUpdate_MobileDevices", localtime, 1 );
+	return undef;
+}
 
-	}
+sub _autocreateDevice{
+    my $hash         = shift;
+    my $item 		 = shift;
+    my $name         = $hash->{NAME};
 
-	my $isEnabled = AttrVal($name, 'generateWeather', 'yes');
-	if ($isEnabled eq 'no') {
-		my $msg = "Attribute 'generateWeather' is set to no. Command will not be executed.";
-		Log3 $name, 1, $msg;
-		return $msg;
+    Log3 $name, 5, 'Autocreating Tado Devices if not existing';
+
+	my $code = $name ."-". $item->{serialNo};
+
+	if( defined($modules{TadoDevice}{defptr}{$code}) )
+	{
+		Log3 $name, 1, "GetDevices ($name): device id '$item->{serialNo}' already defined as '$modules{TadoDevice}{defptr}{$code}->{NAME}'";
+
+	} else {
+
+		my $deviceName = "Tado_" . $item->{serialNo};
+		$deviceName =~ s/ /_/g;
+		my $define= "$deviceName TadoDevice $item->{serialNo} IODev=$name";
+
+		Log3 $name, 1, "GetDevices ($name): created new device '$deviceName' of type '$item->{deviceType}'";
+
+		my $cmdret= CommandDefine(undef,$define);
+
+		if(defined $cmdret) {
+			if( not index($cmdret, 'already defined') != -1) {
+				Log3 $name, 1, "$name: Autocreate: An error occurred while creating device for id '$item->{id}': $cmdret";
+			}
+
+		} else {
+
+			my $deviceHash = $modules{TadoDevice}{defptr}{$code};
+
+			CommandAttr(undef, "$deviceName room Tado");
+			CommandAttr(undef, "$deviceName subType " . ($item->{deviceType} eq 'IB01' ? "bridge" : "thermostat"));
+			$deviceHash->{deviceType} = $item->{deviceType};
+			$deviceHash->{serialNo} = $item->{serialNo};
+			$deviceHash->{shortSerialNo} = $item->{shortSerialNo};
+			$deviceHash->{capabilities} = join(' ', $item->{characteristics}->{capabilities});
+
+		}
 	}
+	return undef;
+}
+
+sub _autocreateMobileDevice {
+    my $hash         = shift;
+    my $item 		 = shift;
+    my $name         = $hash->{NAME};
+
+
+	readingsSingleUpdate($hash, "MobileDevice_".$item->{id} , $item->{name},1 );
+	my $code = $name ."-". $item->{id};
+
+	if( defined($modules{TadoDevice}{defptr}{$code}) )
+	{
+		Log3 $name, 5, "GetMobileDevices ($name): mobiledevice id '$item->{id}' already defined as '$modules{TadoDevice}{defptr}{$code}->{NAME}'";
+
+	} else {
+
+		my $deviceName = "Tado_" . $item->{name};
+		$deviceName =~ s/ /_/g;
+		my $define= "$deviceName TadoDevice $item->{id} IODev=$name";
+
+		Log3 $name, 1, "GetMobileDevices ($name): create new device '$deviceName'";
+
+		my $cmdret= CommandDefine(undef,$define);
+
+		if(defined $cmdret) {
+			if( not index($cmdret, 'already defined') != -1) {
+				Log3 $name, 1, "$name: Autocreate: An error occurred while creating device for id '$item->{name}': $cmdret";
+			}
+		} else {
+
+			my $deviceHash = $modules{TadoDevice}{defptr}{$code};
+
+			CommandAttr(undef,"$deviceName room Tado");
+			CommandAttr(undef,"$deviceName subType mobile_device");
+			$deviceHash->{device_platform} = $item->{deviceMetadata}->{platform};
+			$deviceHash->{device_osVersion} = $item->{deviceMetadata}->{osVersion};
+			$deviceHash->{device_locale} = $item->{deviceMetadata}->{locale};
+			$deviceHash->{device_model} = $item->{deviceMetadata}->{model};
+
+		}
+	}
+}
+
+sub _autocreateWeatherChannel {
+    my $hash         = shift;
+    my $item 		 = shift;
+    my $name         = $hash->{NAME};
 
 
 	my $code = $name ."-weather";
 
 	if( defined($modules{TadoDevice}{defptr}{$code}) ) {
+		
 		my $msg = "GetDevices ($name): weather device already defined as '$modules{TadoDevice}{defptr}{$code}->{NAME}'";
 		Log3 $name, 5, $msg;
+
 	} else {
 
 		my $deviceName = "Tado_Weather";
@@ -992,984 +1289,85 @@ sub DefineWeatherChannel($)
 
 			CommandAttr(undef,"$deviceName room Tado");
 			CommandAttr(undef,"$deviceName subType weather");
-			RequestWeatherUpdate($hash);
 		}
 	}
 	return undef;
 }
 
-sub GetEarlyStart($)
-{
-	my ($hash) = @_;
-	my $name = $hash->{NAME};
+sub Processing_Dpoint_GetZones {
+    my $hash         = shift;
+    my $decoded_data = shift;
+    my $name         = $hash->{NAME};
 
-	if (not defined $hash){
-		Log3 $name, 1, "Erro in GetEarlyStart: No zones defined. Define zones first." if (not defined InternalVal($name,'ZoneIDs', undef));
-		return undef;
-	}
+	readingsBeginUpdate($hash);
 
-	my $homeID = ReadingsVal ($name,"HomeID",undef);
-	if (not defined $homeID) {
-		my $msg = "Error on GetEarlyStart. Missing HomeID. Please define Home first.";
-		Log3 $name, 1, $msg;
-		return $msg;
-	}
+	my $ZoneCount = 0;
+	my %ZoneIds = ();
 
-	Log3 $name, 3, sprintf("Getting status update on early start for %s zones.", ReadingsVal($name,'ZoneCount', undef));
+	for my $item( @{$decoded_data} ){
 
-	foreach my $i (split /, /,  InternalVal($name,'ZoneIDs', undef)) {
+		$ZoneCount += 1;
+		readingsBulkUpdate($hash, "ZoneCount", $ZoneCount);
+		Log3 $name, 4, "GetZones ($name): zonecount is $ZoneCount";
 
-		my $readTemplate = $url{earlyStart};
+		my $deviceName = makeDeviceName($item->{name});
 
-		$readTemplate =~ s/#HomeID#/$homeID/g;
-		$readTemplate =~ s/#ZoneID#/$i/g;
-
-		my $d = httpSimpleOperationOAuth( $hash , $readTemplate, 'GET'  );
-
-		my $message = "Tado;$i;earlyStart;$d->{enabled}";
-
-		Log3 $name, 4, "$name: trying to dispatch message: $message";
-		my $found = Dispatch($hash, $message);
-		Log3 $name, 4, "$name: tried to dispatch message. Result: $found";
-	}
-	return undef;
-}
-
-
-
-sub UpdateEarlyStartCallback($)
-{
-	my ($param, $err, $data) = @_;
-	my $hash = $param->{hash};
-	my $name = $hash->{NAME};
-
-	if($err ne "")                                                                                                      # wenn ein Fehler bei der HTTP Abfrage aufgetreten ist
-	{
-		Log3 $name, 3, "error while requesting EarlyStart Information: ".$param->{url}." - $err";                                               # Eintrag fürs Log
-		readingsSingleUpdate($hash, "state", "ERROR", 1);
-		return undef;
-	}
-
-	Log3 $name, 3, "Received non-blocking data from TADO for weather device.";
-
-	Log3 $name, 4, "FHEM -> Tado: " . $param->{url};
-	Log3 $name, 4, "FHEM -> Tado: " . $param->{message} if (defined $param->{message});
-	Log3 $name, 4, "Tado -> FHEM: " . $data;
-	Log3 $name, 5, '$err: ' . $err;
-	Log3 $name, 5, "method: " . $param->{method};
-	Log3 $name, 2, "Something gone wrong" if( $data =~ "/tadoMode/" );
-
-	if (!defined($data) or $param->{method} eq 'DELETE') {
-		return undef;
-	}
-
-	eval {
-		my $d  = decode_json($data) if( !$err );
-		Log3 $name, 5, 'Decoded: ' . Dumper($d);
-
-
-
-		if (defined $d && ref($d) eq "HASH" && defined $d->{errors}){
-			log 1, Dumper $d;
-			readingsSingleUpdate($hash,'state',"Error: $d->{errors}[0]->{code} / $d->{errors}[0]->{title}",0);
-			return undef;
-		}
-
-		my $message = "Tado;$param->{zoneID};earlyStart;$d->{enabled}";
-
-		Log3 $name, 4, "$name: trying to dispatch message: $message";
-		my $found = Dispatch($hash, $message);
-		Log3 $name, 4, "$name: tried to dispatch message. Result: $found";
-
-		return undef;
-
-	} or do  {
-		Log3 $name, 5, 'Failure decoding: ' . $@;
-		return undef;
-	}
-}
-
-sub RequestEarlyStartUpdate($)
-{
-	my ($hash) = @_;
-	my $name = $hash->{NAME};
-
-	if (not defined $hash){
-		Log3 $name, 1, "Error in RequestEarlyStartUpdate: No zones defined. Define zones first." if (not defined InternalVal($name,'ZoneIDs', undef));
-		return undef;
-	}
-
-	my $homeID = ReadingsVal ($name,"HomeID",undef);
-	if (not defined $homeID)
-	{
-		my $msg = "Error on RequestEarlyStartUpdate. Missing HomeID. Please define Home first.";
-		Log3 $name, 1, $msg;
-		return $msg;
-	}
-
-
-	Log3 $name, 3, sprintf("Getting status update on early start for %s zones.", ReadingsVal($name,'ZoneCount', undef));
-
-	foreach my $i (split /, /,  InternalVal($name,'ZoneIDs', undef)) {
-
-		my $readTemplate = $url{earlyStart};
-		my $ZoneName = "Zone_" . $i . "_ID";
-
-		$readTemplate =~ s/#HomeID#/$homeID/g;
-		$readTemplate =~ s/#ZoneID#/$i/g;
-
-	    my $CurrentTokenData = LoadToken($hash);
-
-		my $request = {
-			url           => $readTemplate,
-            header => {
-                 "Content-Type" => "application/json;charset=UTF-8",
-                 "Authorization" => "$CurrentTokenData->{'token_type'} $CurrentTokenData->{'access_token'}"
-                 },
-			method        => 'GET',
-			timeout       =>  2,
-			hideurl       =>  1,
-			callback      => \&UpdateEarlyStartCallback,
-			hash          => $hash,
-			zoneID        => $i
-		};
-
-		Log3 $name, 5, 'NonBlocking Request: ' . Dumper($request);
-
-		HttpUtils_NonblockingGet($request);
-	}
-}
-
-sub UpdateWeatherCallback($)
-{
-	my ($param, $err, $data) = @_;
-	my $hash = $param->{hash};
-	my $name = $hash->{NAME};
-
-	if($err ne "")                                                                                                      # wenn ein Fehler bei der HTTP Abfrage aufgetreten ist
-	{
-		Log3 $name, 3, "error while requesting ".$param->{url}." - $err";                                               # Eintrag fürs Log
-		readingsSingleUpdate($hash, "state", "ERROR", 1);
-		return undef;
-	}
-
-	Log3 $name, 3, "Received non-blocking data from TADO for weather device.";
-
-	Log3 $name, 4, "FHEM -> Tado: " . $param->{url};
-	Log3 $name, 4, "FHEM -> Tado: " . $param->{message} if (defined $param->{message});
-	Log3 $name, 4, "Tado -> FHEM: " . $data;
-	Log3 $name, 5, '$err: ' . $err;
-	Log3 $name, 5, "method: " . $param->{method};
-	Log3 $name, 2, "Something gone wrong" if( $data =~ "/tadoMode/" );
-
-	if (!defined($data) or $param->{method} eq 'DELETE') {
-		return undef;
-	}
-
-	eval {
-		my $d  = decode_json($data) if( !$err );
-		Log3 $name, 5, 'Decoded: ' . Dumper($d);
-
-		if (defined $d && ref($d) eq "HASH" && defined $d->{errors}){
-			log 1, Dumper $d;
-			readingsSingleUpdate($hash,'state',"Error: $d->{errors}[0]->{code} / $d->{errors}[0]->{title}",0);
-			return undef;
-		}
-
-		my $message = "Tado;weather;weather;"
-		. $d->{solarIntensity}->{percentage} . ";"
-		. $d->{solarIntensity}->{timestamp} . ";"
-		. $d->{outsideTemperature}->{celsius} . ";"
-		. $d->{outsideTemperature}->{timestamp} . ";"
-		. $d->{weatherState}->{value} . ";"
-		. $d->{weatherState}->{timestamp};
-
-		Log3 $name, 4, "$name: trying to dispatch message: $message";
-		my $found = Dispatch($hash, $message);
-		Log3 $name, 4, "$name: tried to dispatch message. Result: $found";
-
-		readingsBeginUpdate($hash);
-		readingsBulkUpdate($hash, "LastUpdate_Weather", localtime );
-		readingsEndUpdate($hash, 1);
-
-		return undef;
-	} or do  {
-		Log3 $name, 5, 'Failure decoding: ' . $@;
-		return undef;
-	}
-
-}
-
-
-sub UpdatePresenceCallback($)
-{
-	my ($param, $err, $data) = @_;
-	my $hash = $param->{hash};
-	my $name = $hash->{NAME};
-
-	if($err ne "")                                                                                                      # wenn ein Fehler bei der HTTP Abfrage aufgetreten ist
-	{
-		Log3 $name, 3, "error while requesting ".$param->{url}." - $err";                                               # Eintrag fürs Log
-		readingsSingleUpdate($hash, "state", "ERROR", 1);
-		return undef;
-	}
-
-	Log3 $name, 3, "Received non-blocking data from TADO for devices.";
-
-	Log3 $name, 4, "FHEM -> Tado: " . $param->{url};
-	Log3 $name, 4, "FHEM -> Tado: " . $param->{message} if (defined $param->{message});
-	Log3 $name, 4, "Tado -> FHEM: " . $data;
-	Log3 $name, 5, '$err: ' . $err;
-	Log3 $name, 5, "method: " . $param->{method};
-	Log3 $name, 2, "Something gone wrong" if( $data =~ "/tadoMode/" );
-
-	if (!defined($data) or $param->{method} eq 'DELETE') {
-		return undef;
-	}
-
-	eval {
-		my $d  = decode_json($data) if( !$err );
-		Log3 $name, 4, 'Decoded: ' . Dumper($d);
-
-		if (defined $d && ref($d) eq "HASH" && defined $d->{errors}){
-			log 1, Dumper $d;
-			readingsSingleUpdate($hash,'state',"Error: $d->{errors}[0]->{code} / $d->{errors}[0]->{title}",0);
-			return undef;
-		}
-
-		readingsBeginUpdate($hash);
-		readingsBulkUpdate($hash, "Presence", $d->{presence} );
-		readingsEndUpdate($hash, 1);
-
-		return undef;
-	} or do  {
-		Log3 $name, 5, 'Failure decoding: ' . $@;
-		return undef;
-	}
-
-}
-
-
-sub UpdateDeviceCallback($)
-{
-	my ($param, $err, $data) = @_;
-	my $hash = $param->{hash};
-	my $name = $hash->{NAME};
-
-	if($err ne "")                                                                                                      # wenn ein Fehler bei der HTTP Abfrage aufgetreten ist
-	{
-		Log3 $name, 3, "error while requesting ".$param->{url}." - $err";                                               # Eintrag fürs Log
-		readingsSingleUpdate($hash, "state", "ERROR", 1);
-		return undef;
-	}
-
-	Log3 $name, 3, "Received non-blocking data from TADO for devices.";
-
-	Log3 $name, 4, "FHEM -> Tado: " . $param->{url};
-	Log3 $name, 4, "FHEM -> Tado: " . $param->{message} if (defined $param->{message});
-	Log3 $name, 4, "Tado -> FHEM: " . $data;
-	Log3 $name, 5, '$err: ' . $err;
-	Log3 $name, 5, "method: " . $param->{method};
-	Log3 $name, 2, "Something gone wrong" if( $data =~ "/tadoMode/" );
-
-	if (!defined($data) or $param->{method} eq 'DELETE') {
-		return undef;
-	}
-
-	eval {
-		my $d  = decode_json($data) if( !$err );
-		Log3 $name, 4, 'Decoded: ' . Dumper($d);
-
-		if (defined $d && ref($d) eq "HASH" && defined $d->{errors}){
-			log 1, Dumper $d;
-			readingsSingleUpdate($hash,'state',"Error: $d->{errors}[0]->{code} / $d->{errors}[0]->{title}",0);
-			return undef;
-		}
-
-
-
-		for my $item( @{$d} ){
-
-      my $deviceId = "$item->{serialNo}";
-			my $message = "Tado;$deviceId;devicedata;";
-
-				my $currentFwVersion = $item->{currentFwVersion};
-				$message.=      defined $currentFwVersion ? $currentFwVersion.";" : ";" ;
-				my $inPairingMode = $item->{inPairingMode};
-				$message.=      defined $inPairingMode ? $inPairingMode.";" : ";" ;
-				my $batteryState = $item->{batteryState};
-				$message.=      defined $batteryState ? $batteryState.";" : ";" ;
-				my $connectionStateValue = $item->{connectionState}->{value};
-				$message.=      defined $connectionStateValue ? $connectionStateValue.";" : ";" ;
-				my $connectionStateTimestamp = $item->{connectionState}->{timestamp};
-				$message.=      defined $connectionStateTimestamp ? $connectionStateTimestamp.";" : ";" ;
-
-			Log3 $name, 4, "$name: trying to dispatch message: $message";
-			my $found = Dispatch($hash, $message);
-			$found = "not dispatched" if (not defined $found);
-			Log3 $name, 4, "$name: tried to dispatch message. Result: $found";
-		}
-
-		readingsBeginUpdate($hash);
-		readingsBulkUpdate($hash, "LastUpdate_Devices", localtime );
-		readingsEndUpdate($hash, 1);
-
-		return undef;
-	} or do  {
-		Log3 $name, 5, 'Failure decoding: ' . $@;
-		return undef;
-	}
-
-}
-
-sub UpdateMobileDeviceCallback($)
-{
-	my ($param, $err, $data) = @_;
-	my $hash = $param->{hash};
-	my $name = $hash->{NAME};
-
-	if($err ne "")                                                                                                      # wenn ein Fehler bei der HTTP Abfrage aufgetreten ist
-	{
-		Log3 $name, 3, "error while requesting ".$param->{url}." - $err";                                               # Eintrag fürs Log
-		readingsSingleUpdate($hash, "state", "ERROR", 1);
-		return undef;
-	}
-
-	Log3 $name, 3, "Received non-blocking data from TADO for mobile devices.";
-
-	Log3 $name, 4, "FHEM -> Tado: " . $param->{url};
-	Log3 $name, 4, "FHEM -> Tado: " . $param->{message} if (defined $param->{message});
-	Log3 $name, 4, "Tado -> FHEM: " . $data;
-	Log3 $name, 5, '$err: ' . $err;
-	Log3 $name, 5, "method: " . $param->{method};
-	Log3 $name, 2, "Something gone wrong" if( $data =~ "/tadoMode/" );
-
-	if (!defined($data) or $param->{method} eq 'DELETE') {
-		return undef;
-	}
-
-	eval {
-		my $d  = decode_json($data) if( !$err );
-		Log3 $name, 5, 'Decoded: ' . Dumper($d);
-
-		if (defined $d && ref($d) eq "HASH" && defined $d->{errors}){
-			log 1, Dumper $d;
-			readingsSingleUpdate($hash,'state',"Error: $d->{errors}[0]->{code} / $d->{errors}[0]->{title}",0);
-			return undef;
-		}
-
-		for my $item( @{$d} ){
-
-			my $message = "Tado;$item->{id};locationdata;"
-			. $item->{settings}->{geoTrackingEnabled}. ";";
-
-			if ($item->{settings}->{geoTrackingEnabled})
-			{
-
-				my $locationStale = $item->{location}->{stale};
-				$message.=      defined $locationStale ? $locationStale.";" : ";" ;
-				my $locationAtHome = $item->{location}->{atHome};
-				$message.=      defined $locationAtHome ? $locationAtHome.";" : ";" ;
-				my $locationDegrees = $item->{location}->{bearingFromHome}->{degrees};
-				$message.=      defined $locationDegrees ? $locationDegrees.";" : ";" ;
-				my $locationRadians = $item->{location}->{bearingFromHome}->{radians};
-				$message.=      defined $locationRadians ? $locationRadians.";" : ";" ;
-				my $locationDistance = $item->{location}->{relativeDistanceFromHomeFence};
-				$message.=      defined $locationDistance ? $locationDistance.";" : ";" ;
-
-			} else {
-				$message .= ";;;;;"
-			}
-
-
-			if (defined $item->{settings}->{pushNotifications})
-			{
-				$message .= $item->{settings}->{pushNotifications}->{lowBatteryReminder}. ";"
-				. $item->{settings}->{pushNotifications}->{awayModeReminder}. ";"
-				. $item->{settings}->{pushNotifications}->{homeModeReminder}. ";"
-				. $item->{settings}->{pushNotifications}->{openWindowReminder}. ";"
-				. $item->{settings}->{pushNotifications}->{energySavingsReportReminder}.";";
-				my $val = $item->{settings}->{pushNotifications}->{incidentDetection};
-				$message.=      defined $val ? $val.";" : ";" ;
-				$val = $item->{settings}->{pushNotifications}->{energyIqReminder};
-				$message.=      defined $val ? $val.";" : ";" ;
-			} else {
-				$message .=";;;;;;;"
-			}
-
-
-			if (defined $item->{deviceMetadata})
-			{
-				my $devicePlatform = $item->{deviceMetadata}->{platform};
-				$message.=      defined $devicePlatform ? $devicePlatform.";" : ";" ;
-				my $deviceOs = $item->{deviceMetadata}->{osVersion};
-				$message.=      defined $deviceOs ? $deviceOs.";" : ";" ;
-				my $deviceModel = $item->{deviceMetadata}->{model};
-				$message.=      defined $deviceModel ? $deviceModel.";" : ";" ;
-				my $deviceLocale = $item->{deviceMetadata}->{locale};
-				$message.=      defined $deviceLocale ? $deviceLocale.";" : ";" ;
-			} else {
-				$message .=";;;;"
-			}
-
-			my $specialOffersEnabled = $item->{settings}->{specialOffersEnabled};
-			$message.=      defined $specialOffersEnabled ? $specialOffersEnabled.";" : ";" ;
-			my $onDemandLogRetrievalEnabled = $item->{settings}->{onDemandLogRetrievalEnabled};
-			$message.=      defined $onDemandLogRetrievalEnabled ? $onDemandLogRetrievalEnabled.";" : ";" ;
-
-			Log3 $name, 4, "$name: trying to dispatch message: $message";
-			my $found = Dispatch($hash, $message);
-			$found = "not dispatched" if (not defined $found);
-			Log3 $name, 4, "$name: tried to dispatch message. Result: $found";
-		}
-		readingsBeginUpdate($hash);
-		readingsBulkUpdate($hash, "LastUpdate_MobileDevices", localtime );
-		readingsEndUpdate($hash, 1);
-
-		return undef;
-	} or do  {
-		Log3 $name, 5, 'Failure decoding: ' . $@;
-		return undef;
-	}
-
-}
-
-sub RequestWeatherUpdate($)
-{
-	my ($hash) = @_;
-	my $name = $hash->{NAME};
-
-	if (not defined $hash){
-		Log3 $name, 1, "Error on GetWeather. Missing hash variable";
-		return undef;
-	}
-
-	my $homeID = ReadingsVal ($name,"HomeID",undef);
-	if (not defined $homeID) {
-		my $msg = "Error on RequestWeatherUpdate. Missing HomeID. Please define Home first.";
-		Log3 $name, 1, $msg;
-		return $msg;
-	}
-
-	my $isEnabled = AttrVal($name, 'generateWeather', 'yes');
-	if ($isEnabled eq 'no') {
-		my $msg = "Attribute 'generateWeather' is set to no. Update will not be executed.";
-		Log3 $name, 4, $msg;
-		return undef;
-	}
-
-
-	my $code = $name ."-weather";
-
-	if (not defined($modules{TadoDevice}{defptr}{$code})) {
-		Log3 $name, 3, "RequestWeatherUpdate ($name) : Not updating weather channel as it is not defined.";
-		return undef;
-	}
-
-	Log3 $name, 4, "RequestWeatherUpdate Called. Name: $name";
-	my $readTemplate = $url{getWeather};
-	my $CurrentTokenData = LoadToken($hash);
-
-	$readTemplate =~ s/#HomeID#/$homeID/g;
-
-	my $request = {
-		url           => $readTemplate,
-        header => {
-                 "Content-Type" => "application/json;charset=UTF-8",
-                 "Authorization" => "$CurrentTokenData->{'token_type'} $CurrentTokenData->{'access_token'}"
-                 },
-		method        => 'GET',
-		timeout       =>  2,
-		hideurl       =>  1,
-		callback      => \&UpdateWeatherCallback,
-		hash          => $hash
-	};
-
-	Log3 $name, 5, 'NonBlocking Request: ' . Dumper($request);
-
-	HttpUtils_NonblockingGet($request);
-
-}
-
-sub RequestDeviceUpdate($)
-{
-	my ($hash) = @_;
-	my $name = $hash->{NAME};
-
-	if (not defined $hash){
-		Log3 $name, 1, "Error on RequestDeviceUpdate. Missing hash variable";
-		return undef;
-	}
-
-	my $isEnabled = AttrVal($name, 'generateDevices', 'yes');
-	if ($isEnabled eq 'no') {
-		my $msg = "Attribute 'generateDevices' is set to no. No update will be executed.";
-		Log3 $name, 3, $msg;
-		return undef;
-	}
-
-	my $homeID = ReadingsVal ($name,"HomeID",undef);
-	if (not defined $homeID) {
-		my $msg = "Error on RequestDeviceUpdate. Missing HomeID. Please define Home first.";
-		Log3 $name, 1, $msg;
-		return $msg;
-	}
-
-
-
-	Log3 $name, 4, "RequestDeviceUpdate Called. Name: $name";
-	my $readTemplate = $url{getDevices};
-	my $CurrentTokenData = LoadToken($hash);
-
-	$readTemplate =~ s/#HomeID#/$homeID/g;
-
-	my $request = {
-		url           => $readTemplate,
-        header => {
-                 "Content-Type" => "application/json;charset=UTF-8",
-                 "Authorization" => "$CurrentTokenData->{'token_type'} $CurrentTokenData->{'access_token'}"
-                 },
-		method        => 'GET',
-		timeout       =>  2,
-		hideurl       =>  1,
-		callback      => \&UpdateDeviceCallback,
-		hash          => $hash
-	};
-
-	Log3 $name, 5, 'NonBlocking Request: ' . Dumper($request);
-
-	HttpUtils_NonblockingGet($request);
-
-}
-
-sub RequestPresenceUpdate($)
-{
-	my ($hash) = @_;
-	my $name = $hash->{NAME};
-
-	if (not defined $hash){
-		Log3 $name, 1, "Error on RequestPresenceUpdate. Missing hash variable";
-		return undef;
-	}
-
-
-	my $homeID = ReadingsVal ($name,"HomeID",undef);
-	if (not defined $homeID) {
-		my $msg = "Error on RequestPresenceUpdate. Missing HomeID. Please define Home first.";
-		Log3 $name, 1, $msg;
-		return $msg;
-	}
-
-
-
-	Log3 $name, 4, "RequestPresenceUpdate Called. Name: $name";
-	my $readTemplate = $url{getPresenceStatus};
-	my $CurrentTokenData = LoadToken($hash);
-
-	$readTemplate =~ s/#HomeID#/$homeID/g;
-
-	my $request = {
-		url           => $readTemplate,
-        header => {
-                 "Content-Type" => "application/json;charset=UTF-8",
-                 "Authorization" => "$CurrentTokenData->{'token_type'} $CurrentTokenData->{'access_token'}"
-                 },
-		method        => 'GET',
-		timeout       =>  2,
-		hideurl       =>  1,
-		callback      => \&UpdatePresenceCallback,
-		hash          => $hash
-	};
-
-	Log3 $name, 5, 'NonBlocking Request: ' . Dumper($request);
-
-	HttpUtils_NonblockingGet($request);
-
-}
-
-sub RequestMobileDeviceUpdate($)
-{
-	my ($hash) = @_;
-	my $name = $hash->{NAME};
-
-	if (not defined $hash){
-		Log3 $name, 1, "Error on RequestMobileDeviceUpdate. Missing hash variable";
-		return undef;
-	}
-
-
-	my $isEnabled = AttrVal($name, 'generateMobileDevices', 'yes');
-	if ($isEnabled eq 'no') {
-		my $msg = "Attribute 'generateMobileDevices' is set to no. No update will be executed.";
-		Log3 $name, 3, $msg;
-		return undef;
-	}
-
-	my $homeID = ReadingsVal ($name,"HomeID",undef);
-	if (not defined $homeID) {
-		my $msg = "Error on GetEarlyStart. Missing HomeID. Please define Home first.";
-		Log3 $name, 1, $msg;
-		return $msg;
-	}
-
-
-	Log3 $name, 4, "RequestMobileDeviceUpdate Called. Name: $name";
-	my $readTemplate = $url{getMobileDevices};
-	$readTemplate =~ s/#HomeID#/$homeID/g;
-	my $CurrentTokenData = LoadToken($hash);
-
-	my $request = {
-		url           => $readTemplate,
-        header => {
-                 "Content-Type" => "application/json;charset=UTF-8",
-                 "Authorization" => "$CurrentTokenData->{'token_type'} $CurrentTokenData->{'access_token'}"
-                 },
-		method        => 'GET',
-		timeout       =>  2,
-		hideurl       =>  1,
-		callback      => \&UpdateMobileDeviceCallback,
-		hash          => $hash
-	};
-
-	Log3 $name, 5, 'NonBlocking Request: ' . Dumper($request);
-
-	HttpUtils_NonblockingGet($request);
-
-}
-
-sub UpdateZoneCallback($)
-{
-	my ($param, $err, $data) = @_;
-	my $hash = $param->{hash};
-	my $name = $hash->{NAME};
-
-	if($err ne "")                                                                                                      # wenn ein Fehler bei der HTTP Abfrage aufgetreten ist
-	{
-		Log3 $name, 3, "error while requesting ".$param->{url}." - $err";                                               # Eintrag fürs Log
-		readingsSingleUpdate($hash, "state", "ERROR", 1);
-		return undef;
-	}
-
-	Log3 $name, 3, "Received non-blocking data from TADO for zone " . $param->{zoneID};
-
-	Log3 $name, 4, "FHEM -> Tado: " . $param->{url};
-	Log3 $name, 4, "FHEM -> Tado: " . $param->{message} if (defined $param->{message});
-	Log3 $name, 4, "Tado -> FHEM: " . $data;
-	Log3 $name, 5, '$err: ' . $err;
-	Log3 $name, 5, "method: " . $param->{method};
-	Log3 $name, 2, "Something gone wrong" if( $data =~ "/tadoMode/" );
-
-	if (!defined($data) or $param->{method} eq 'DELETE') {
-		return undef;
-	}
-
-	eval {
-		my $d  = decode_json($data) if( !$err );
-		Log3 $name, 5, 'Decoded: ' . Dumper($d);
-
-
-
-
-		if (defined $d && ref($d) eq "HASH" && defined $d->{errors}){
-			log 1, Dumper $d;
-			readingsSingleUpdate($hash,'state',"Error: $d->{errors}[0]->{code} / $d->{errors}[0]->{title}",1);
-			return undef;
-		}
-
-		my $overlay =  defined $d->{overlay} ? 1 : 0;
-
-		my $message = "Tado;$param->{zoneID};temp;";
-		#measured-temp
-		my $insideTempCelsius = $d->{sensorDataPoints}->{insideTemperature}->{celsius};
-		$message.=	defined $insideTempCelsius ? $insideTempCelsius.";" : ";" ;
-		#measured-temp-timestamp
-		my $insideTempTimestamp = $d->{sensorDataPoints}->{insideTemperature}->{timestamp};
-		$message.=	defined $insideTempTimestamp ? $insideTempTimestamp.";" : ";" ;
-		#measured-temp-fahrenheit
-		my $measuredFahrenheit = $d->{sensorDataPoints}->{insideTemperature}->{fahrenheit};
-		$message.=	defined $measuredFahrenheit ? $measuredFahrenheit.";" : ";" ;
-
-		#measured-temp-precision
-		my $measuredPrecisionCelsius = $d->{sensorDataPoints}->{insideTemperature}->{precision}->{celsius};
-		$message.=	defined $measuredPrecisionCelsius ? $measuredPrecisionCelsius.";" : ";" ;
-		#measured-temp-precision-fahrenheit
-		my $measuredPrecisionFahrenheit = $d->{sensorDataPoints}->{insideTemperature}->{precision}->{fahrenheit};
-		$message.=	defined $measuredPrecisionFahrenheit ? $measuredPrecisionFahrenheit.";" : ";" ;
-
-		#desired-temp
-		if ($d->{setting}->{power} eq "OFF") {
-			$message .= $d->{setting}->{power}. ";";
-		} else {
-			$message .=  $d->{setting}->{temperature}->{celsius}. ";";
-		}
-
-		#measured-humidity
-		my $measuredHumidity = $d->{sensorDataPoints}->{humidity}->{percentage};
-		$message.=      defined $measuredHumidity ? $measuredHumidity.";" : ";" ;
-		#measured-humidity-timestamp
-		my $measuredHumidityTimestamp = $d->{sensorDataPoints}->{humidity}->{timestamp};
-		$message.=      defined $measuredHumidityTimestamp ? $measuredHumidityTimestamp.";" : ";" ;
-
-
-		#link
-		my $link = $d->{link}->{state};
-		$message.=	defined $link ? $link.";" : ";" ;
-
-
-
-		#open-window
-		if (not defined $d->{openWindow}) {
-			$message .= "null;"
-		} else {
-      $message .= "true;"
-		}
-
-    #open-window
-		if (not defined $d->{openWindowDetected}) {
-			$message .= "false;"
-		} else {
-			$message .= $d->{openWindowDetected} . ";"
-		}
-
-
-
-		#heating-percentage
-		my $heatingPowerTemperature = $d->{activityDataPoints}->{heatingPower}->{percentage};
-		$message.=	defined $heatingPowerTemperature ? $heatingPowerTemperature.";" : ";" ;
-
-		#heating-percentage-timestamp
-		my $heatingTimestamp = $d->{activityDataPoints}->{heatingPower}->{timestamp};
-		$message.=	defined $heatingTimestamp ? $heatingTimestamp.";" : ";" ;
-
-
-
-		if (defined $d->{nextScheduleChange}){
-			#nextScheduleChange-temperature
-			my $nextScheduleChangeTemperature = $d->{nextScheduleChange}->{setting}->{temperature}->{celsius};
-			$message.=	defined $nextScheduleChangeTemperature ? $nextScheduleChangeTemperature.";" : ";" ;
-			#nextScheduleChange-power
-			my $nextScheduleChangePower = $d->{nextScheduleChange}->{setting}->{power};
-				$message.=	defined $nextScheduleChangePower ? $nextScheduleChangePower.";" : ";" ;
-			#nextScheduleChange-start
-			my $nextScheduleChangeState = $d->{nextScheduleChange}->{start};
-				$message.=	defined $nextScheduleChangeState ? $nextScheduleChangeState.";" : ";" ;
-
-		} else {
-			$message .=  ";;;";
-		}
-
-		#tado-mode
-		if (not defined $d->{tadoMode}) {
-			$message .= "null;"
-		} else {
-			$message .= $d->{tadoMode} . ";"
-		}
-
-		#overlay-active
-		$message .= $overlay;
-
-		if ($overlay) {
-			$message .= ";"
-			#overlay-mode
-			. $d->{overlay}->{type} . ";"
-			#overlay-power
-			. $d->{overlay}->{setting}->{power} . ";";
-			#overlay-desired-temperature
-
-			if (not $d->{overlay}->{setting}->{power} eq 'OFF'){
-				$message .= $d->{overlay}->{setting}->{temperature}->{celsius} . ";";
-			} else {
-				$message .= 'OFF;';
-			}
-
-			#overlay-termination-mode
-			$message .= $d->{overlay}->{termination}->{type} . ";";
-			#overlay-termination-durationInSeconds
-
-			if (not $d->{overlay}->{termination}->{type} eq 'MANUAL'){
-
-				#overlay-overlay-durationInSeconds
-				my $overlayDurationInSeconds = $d->{overlay}->{termination}->{durationInSeconds};
-				$message .= defined $overlayDurationInSeconds ? $overlayDurationInSeconds.";" : ";";
-
-				#overlay-overlay-termination-expiry
-				my $overlayExpiry = $d->{overlay}->{termination}->{expiry};
-				$message .= defined $overlayExpiry ? $overlayExpiry.";" : ";";
-
-				#overlay-overlay-termination-remainingTimeInSeconds
-				my $overlayRemainingTimeInSeconds = $d->{overlay}->{termination}->{remainingTimeInSeconds};
-				$message .= defined $overlayRemainingTimeInSeconds ? $overlayRemainingTimeInSeconds.";" : ";";
-
-			} else {
-				$message .=  ";;;";
-			}
-
-		# No overlay active - all values null
-		} else {
-				$message .= ";;;;;;;"
-		}
-
-    #open-window
-		if (defined $d->{openWindow}) {
-			$message .= $d->{openWindow}->{detectedTime}.";".$d->{openWindow}->{durationInSeconds}.";".$d->{openWindow}->{expiry}.";";
-		} else {
-      $message .= ";;;";
-		}
-
-
-		Log3 $name, 4, "$name: trying to dispatch message: $message";
-		my $found = Dispatch($hash, $message);
-		Log3 $name, 4, "$name: tried to dispatch message. Result: $found";
-
-		readingsBeginUpdate($hash);
-		readingsBulkUpdate($hash, "LastUpdate_Zones", localtime );
-		readingsEndUpdate($hash, 1);
-
-		return undef;
-	} or do  {
-		Log3 $name, 5, 'Failure decoding: ' . $@;
-		return undef;
-	}
-}
-
-sub UpdateAirComfortCallback($)
-{
-	my ($param, $err, $data) = @_;
-	my $hash = $param->{hash};
-	my $name = $hash->{NAME};
-
-	if($err ne "")                                                                                                      # wenn ein Fehler bei der HTTP Abfrage aufgetreten ist
-	{
-		Log3 $name, 3, "error while requesting ".$param->{url}." - $err";                                               # Eintrag fürs Log
-		readingsSingleUpdate($hash, "state", "ERROR", 1);
-		return undef;
-	}
-
-	Log3 $name, 3, "Received non-blocking data from TADO for air quality ";
-
-	Log3 $name, 4, "FHEM -> Tado: " . $param->{url};
-	Log3 $name, 4, "FHEM -> Tado: " . $param->{message} if (defined $param->{message});
-	Log3 $name, 4, "Tado -> FHEM: " . $data;
-	Log3 $name, 5, '$err: ' . $err;
-	Log3 $name, 5, "method: " . $param->{method};
-	Log3 $name, 2, "Something gone wrong" if( $data =~ "/tadoMode/" );
-
-	eval {
-		my $d  = decode_json($data) if( !$err );
-		Log3 $name, 5, 'Decoded: ' . Dumper($d);
-
-
-		if (defined $d && ref($d) eq "HASH" && defined $d->{errors}){
-			log 1, Dumper $d;
-			readingsSingleUpdate($hash,'state',"Error: $d->{errors}[0]->{code} / $d->{errors}[0]->{title}",1);
-			return undef;
-		}
-
-		readingsBeginUpdate($hash);
-		readingsBulkUpdate($hash, "airComfort_freshness", $d->{freshness}->{value} );
-		readingsBulkUpdate($hash, "airComfort_lastWindowOpen", $d->{freshness}->{lastOpenWindow} );
-		readingsEndUpdate($hash, 1);
-
-
-		foreach my $param (@{$d->{comfort}})
+		if (not exists $ZoneIds{$item->{id}})
 		{
-     Log3 $name, 4, "Trying to decode message: ". Dumper($param);
-			my $message = "Tado;$param->{roomId};airComfort;";
+			$ZoneIds{$item->{id}} = $deviceName;
+		}
 
+		Log3 $name, 4, "While updating zones (displays variable): ".Dumper \%ZoneIds;
 
-		 $message .= $param->{temperatureLevel} . ";"
-			. $param->{humidityLevel} . ";"
-			. $param->{coordinate}->{radial} . ";"
-			. $param->{coordinate}->{angular} . ";";
+		readingsBulkUpdate($hash, "Zone_" . $item->{id} . "_Name"  ,  $deviceName );
 
-			Log3 $name, 4, "$name: trying to dispatch message: $message";
-			my $found = Dispatch($hash, $message);
-			Log3 $name, 4, "$name: tried to dispatch message. Result: $found";
+		my $code = $name ."-". $item->{id};
+
+		if( defined($modules{TadoDevice}{defptr}{$code}) ) {
+
+			Log3 $name, 5, "$name: id '$item->{id}' already defined as '$modules{TadoDevice}{defptr}{$code}->{NAME}'";
+
+		} else {
+
+			my $deviceName = "Tado_" . makeDeviceName($item->{name});
+			$deviceName =~ s/ /_/g;
+			my $define= "$deviceName TadoDevice $item->{id} IODev=$name";
+
+			Log3 $name, 1, "GetZones ($name): create new device '$deviceName' for zone '$item->{id}'";
+
+			my $cmdret= CommandDefine(undef,$define);
+
+			if(defined $cmdret) {
+				if( not index($cmdret, 'already defined') != -1) {
+					Log3 $name, 1, "$name: Autocreate: An error occurred while creating device for id '$item->{id}': $cmdret";
+				}
+			} else {
+				CommandAttr(undef,"$deviceName room Tado");
+				CommandAttr(undef,"$deviceName subType zone");
+			}
 
 		}
 
-		readingsBeginUpdate($hash);
-		readingsBulkUpdate($hash, "LastUpdate_AirComfort", localtime );
-		readingsEndUpdate($hash, 1);
+		#Independent if the device was created or not all internals of the device must be Updated
+		my $deviceHash = $modules{TadoDevice}{defptr}{$code};
+		$deviceHash->{originalName} = $item->{name};
+		$deviceHash->{TadoType} = $item->{Type};
 
-		return undef;
-	} or do  {
-		Log3 $name, 5, 'Failure decoding: ' . $@;
-		return undef;
-	}
-}
+		if	(length $item->{dateCreated}) {
+			readingsSingleUpdate($deviceHash, "date_created"  , $item->{dateCreated} , 1);
+		}
 
-
-sub UpdateAuthTimer($)
-{
-	my ($hash) = @_;
-	my $name = $hash->{NAME};
-
-	my $data = {
-        client_id     => $oauth{client_id},
-		device_code   => $hash->{AUTH_DEVICE_CODE},
-        grant_type    => "urn:ietf:params:oauth:grant-type:device_code"
-    };
-
-    my $param = {
-        url     => $url{getOAuthToken},
-        method  => 'POST',
-        timeout => 5,
-        hash    => $hash,
-        data    => $data
-    };
-
-  my ( $err, $returnData ) = HttpUtils_BlockingGet($param);
-
-    if ( $err ne "" ) {
-        Log3 $name, 3,
-            "Tado $name" . ": "
-          . "NewTokenRequest: Error while requesting "
-          . $param->{url}
-          . " - $err";
-    }
-    elsif ( $returnData ne "" ) {	
-
-		Log3 $name, 5, "url " . $param->{url} . " returned: $returnData";
-        my $decoded_data = eval { decode_json($returnData) };
-
-
-		if (defined($decoded_data) && defined($decoded_data->{'access_token'})) {
-            $hash->{'.TOKEN'} = $decoded_data;
-			$hash->{TOKEN_LIFETIME} = gettimeofday() + $decoded_data->{'expires_in'};
-			$hash->{TOKEN_LIFETIME_HR} = localtime( $hash->{TOKEN_LIFETIME} );
-			Log3 $name, 5,
-				"Tado $name" . ": "
-				. "Retrived new authentication token successfully. Valid until "
-				. localtime( $hash->{TOKEN_LIFETIME} );
-			$hash->{STATE} = "reachable";
-
-			readingsDelete ($hash, "device_auth_url");
-			delete $hash->{AUTH_DEVICE_CODE};
-			delete $hash->{AUTH_INTERVAL};
-
-
-			RemoveInternalTimer($hash);
-			Setup($hash);
-			readingsSingleUpdate($hash,'state','Polling',0);
-
-			return $decoded_data;
+		if	(length $item->{supportsDazzle}) {
+			readingsSingleUpdate($deviceHash, "supports_dazzle"  , $item->{supportsDazzle}, 1 );
 		}
 
 	}
 
-	#local allows call of function without adding new timer.
-	#must be set before call ($hash->{LOCAL} = 1) and removed after (delete $hash->{LOCAL};)
-	#You just get here if the call did not sucessfully return data Then you need to loop the auth timer.
-	if(!$hash->{LOCAL}) {
-		RemoveInternalTimer($hash);
-		InternalTimer(gettimeofday()+InternalVal($name,'INTERVAL', undef), "FHEM::Tado::UpdateAuthTimer", $hash);
-		readingsSingleUpdate($hash,'state','Polling Auth',0);
-	}
-
+	$hash->{ZoneIDs} = join(", ", keys %ZoneIds);
+	Log3 $name, 3, "After Updating zones: ".Dumper InternalVal($name,'ZoneIDs', undef);
+	readingsEndUpdate($hash, 1);
+	return undef;
 }
-
-
 
 
 sub UpdateDueToTimer($)
@@ -1987,132 +1385,15 @@ sub UpdateDueToTimer($)
 		readingsSingleUpdate($hash,'state','Polling',0);
 	}
 
-	RequestZoneUpdate($hash);
-	RequestAirComfortUpdate($hash);
-	RequestMobileDeviceUpdate($hash);
-	RequestWeatherUpdate($hash);
 
-	RequestDeviceUpdate($hash);
-	RequestPresenceUpdate($hash);
-
-}
-
-sub RequestZoneUpdate($)
-{
-	my ($hash) = @_;
-	my $name = $hash->{NAME};
-
-	if (not defined $hash){
-		Log3 $name, 1, "Error on RequestZoneUpdate. Missing hash variable";
-		return undef;
-	}
-
-	if (not defined InternalVal($name,'ZoneIDs', undef)){
-		Log3 $name, 1, "Error on RequestZoneUpdate. Missing zones. Please define zones first.";
-		return undef;
-	}
-
-	my $homeID = ReadingsVal ($name,"HomeID",undef);
-	if (not defined $homeID) {
-		my $msg = "Error on RequestZoneUpdate. Missing HomeID. Please define Home first.";
-		Log3 $name, 1, $msg;
-		return $msg;
-	}
-
-	Log3 $name, 4, "RequestZoneUpdate Called for non-blocking value update. Name: $name";
-
-
-	Log3 $name, 3, sprintf ("Getting zone update for %s zones.", ReadingsVal($name, "ZoneCount", 0 ));
-
-	Log3 $name, 3, "Array out of zone ids: ". Dumper(split /, /,  InternalVal($name,'ZoneIDs', undef));
-
-
-	foreach my $i (split /, /,  InternalVal($name,'ZoneIDs', undef)) {
-
-		Log3 $name, 3, "Updating zone id: ". $i;
-
-		my $readTemplate = $url{"getZoneTemperature"};
-
-	   my $CurrentTokenData = LoadToken($hash);
-
-		$readTemplate =~ s/#HomeID#/$homeID/g;
-		$readTemplate =~ s/#ZoneID#/$i/g;
-
-		my $request = {
-			url           => $readTemplate,
-            header => {
-                 "Content-Type" => "application/json;charset=UTF-8",
-                 "Authorization" => "$CurrentTokenData->{'token_type'} $CurrentTokenData->{'access_token'}"
-                 },
-			method        => 'GET',
-			timeout       =>  2,
-			hideurl       =>  1,
-			callback      => \&UpdateZoneCallback,
-			hash          => $hash,
-			zoneID        => $i
-		};
-
-		Log3 $name, 5, 'NonBlocking Request: ' . Dumper($request);
-
-		HttpUtils_NonblockingGet($request);
-
-	}
+	GetZoneTemperatures($hash);
+	WriteToCloudAPI( $hash, 'getWeather', 'GET', undef);
+	WriteToCloudAPI( $hash, 'getMobileDevices', 'GET', undef);
+	WriteToCloudAPI( $hash, 'getAirComfort', 'GET', undef);
+	WriteToCloudAPI( $hash, 'getDevices', 'GET', undef);
+	WriteToCloudAPI( $hash, 'getPresenceStatus', 'GET', undef);	
 
 }
-
-sub RequestAirComfortUpdate($)
-{
-	my ($hash) = @_;
-	my $name = $hash->{NAME};
-
-	if (not defined $hash){
-		Log3 $name, 1, "Error on RequestAirComfortUpdate. Missing hash variable";
-		return undef;
-	}
-
-	if (not defined InternalVal($name,'ZoneIDs', undef)){
-		Log3 $name, 1, "Error on RequestAirComfortUpdate. Missing zones. Please define zones first.";
-		return undef;
-	}
-
-	my $homeID = ReadingsVal ($name,"HomeID",undef);
-	if (not defined $homeID) {
-		my $msg = "Error on RequestAirComfortUpdate. Missing HomeID. Please define Home first.";
-		Log3 $name, 1, $msg;
-		return $msg;
-	}
-
-	Log3 $name, 4, "RequestAirComfortUpdate called for non-blocking value update. Name: $name";
-	Log3 $name, 3, "Getting air comfort update.";
-
-	my $readTemplate = GetMessageTemplate($hash, "getAirComfort" );
-	my $CurrentTokenData = LoadToken($hash);
-
-
-	my $request = {
-		url           => $readTemplate,
-        header => {
-                 "Content-Type" => "application/json;charset=UTF-8",
-                 "Authorization" => "$CurrentTokenData->{'token_type'} $CurrentTokenData->{'access_token'}"
-                 },
-		method        => 'GET',
-		timeout       =>  2,
-		hideurl       =>  1,
-		callback      => \&UpdateAirComfortCallback,
-		hash          => $hash
-	};
-
-	Log3 $name, 5, 'NonBlocking Request: ' . Dumper($request);
-
-	HttpUtils_NonblockingGet($request);
-
-}
-
-
-
-
-
-
 
 sub Write ($$)
 {
@@ -2143,12 +1424,12 @@ sub Write ($$)
 
 	if ($code eq 'Update')
 	{
-		RequestZoneUpdate($hash);
+		GetZoneTemperatures($hash);
 		RequestEarlyStartUpdate($hash);
-		RequestWeatherUpdate($hash);
-		RequestMobileDeviceUpdate($hash);
-		RequestAirComfortUpdate($hash);
-		RequestDeviceUpdate($hash);
+		WriteToCloudAPI( $hash, 'getWeather', 'GET', undef);
+		WriteToCloudAPI( $hash, 'getMobileDevices', 'GET', undef);
+		WriteToCloudAPI( $hash, 'getAirComfort', 'GET', undef);
+		WriteToCloudAPI( $hash, 'getDevices', 'GET', undef);
 
 	}
 
@@ -2255,7 +1536,7 @@ sub WriteMobileSettings2Tado {
   if (defined $d && ref($d) eq "HASH" && defined $d->{errors}){
     return "Error: $d->{errors}[0]->{code} / $d->{errors}[0]->{title}";
   }
-  RequestMobileDeviceUpdate($hash);
+  WriteToCloudAPI( $hash, 'getMobileDevices', 'GET', undef);
   return $d->{enabled};
 }
 
@@ -2274,18 +1555,18 @@ sub WriteHiRequest2Tado {
 
 sub WritePresenceStatus2Tado{
 
-	 my ($hash, $homeAwayStatus) = @_;
-	 my $name = $hash->{NAME};
+	my ($hash, $homeAwayStatus) = @_;
+	my $name = $hash->{NAME};
 
-   my $readTemplate = GetMessageTemplate($hash, "setPresenceStatus" );
+    my $readTemplate = GetMessageTemplate($hash, "setPresenceStatus" );
 
-		my %message ;
-		$message{'homePresence'} = $homeAwayStatus;
+	my %message ;
+	$message{'homePresence'} = $homeAwayStatus;
 
-		my $d = httpSimpleOperationOAuth( $hash , $readTemplate, 'PUT',  encode_json \%message  );
+	my $d = httpSimpleOperationOAuth( $hash , $readTemplate, 'PUT',  encode_json \%message  );
 
-		RequestPresenceUpdate($hash);
-		return undef;
+	WriteToCloudAPI( $hash, 'getPresenceStatus', 'GET', undef);
+	return undef;
 }
 
 
