@@ -163,8 +163,6 @@ sub Initialize
 }
 
 sub Setup{
-
-	
 	my ($hash) = @_;
 	my $name = $hash->{NAME};
 	RemoveInternalTimer($hash);
@@ -176,10 +174,10 @@ sub Setup{
 		#Otherwise some error messages are generated due to auto created devices...
 		InternalTimer(gettimeofday()+15, "FHEM::Tado::GetZones", $hash) if (defined $hash);		
 		Log3 $name, 1, sprintf("Define %s: Starting timer with interval %s", $name, InternalVal($name,'INTERVAL', undef));
-		InternalTimer(gettimeofday()+ InternalVal($name,'INTERVAL', undef), "FHEM::Tado::UpdateDueToTimer", $hash) if (defined $hash);
+		InternalTimer(gettimeofday()+ InternalVal($name,'INTERVAL', undef), "FHEM::Tado::UpdateDueToTimer", $hash) if (defined $hash);	
 		return undef;		
 	} else {
-		my $message = "No valid token found. Please authenticate first.";
+		my $message = "[ERROR] No valid token found. Please authenticate first.";
 		Log3 $name, 1, "Define $name: $message";
 		readingsSingleUpdate($hash, "state", $message, 0);
 	}
@@ -191,12 +189,10 @@ sub Define($$)
 	my ($hash, $def) = @_;
 	my @param = split("[ \t]+", $def);
 	my $name = $hash->{NAME};
+	my $errmsg = '';
 
 	Log3 $name, 3, "Define $name: called ";
 
-	my $errmsg = '';
-
-	
 	# Check parameter(s) - Must be min 2 in total (counts strings not purly parameter, interval is optional)
 	if( int(@param) < 2 ) {
 		$errmsg = return "syntax error: define <name> Tado [Interval]";
@@ -217,8 +213,6 @@ sub Define($$)
 	}
 
 	$hash->{APIURI} = 'https://my.tado.com/api/v2/';
-	Log3 $name, 1, "Tado $name: Set APIURI to hash";
-
 
 	if (defined $param[2]) {
 		$hash->{DEF} = sprintf("%s", $param[2]);
@@ -242,7 +236,7 @@ sub Define($$)
 	if( $interval < 5 ) { $interval = 5; }
 	$hash->{INTERVAL} = $interval;
 
-	readingsSingleUpdate($hash,'state','Undefined',0);
+	readingsSingleUpdate($hash,'state','Preparing',0);
 
 	GenerateAttribute($name,"generateDevices","no");
 	GenerateAttribute($name,"generateMobileDevices","no");
@@ -755,7 +749,7 @@ sub WriteToCloudAPI {
     {
         my $homeID = ReadingsVal ($name,"HomeID",undef);
         if ( not defined $homeID ) {
-            my $error =	"Error on Tado_WriteToCloudAPI. Missing HomeID. Please define Home first..";
+            my $error =	"Error on Tado_WriteToCloudAPI. Missing HomeID. Please define Home first. Endpoint: $dpoint";
             Log3 $name, 1, $error;
             return $error;
         }
@@ -829,7 +823,7 @@ sub ResponseHandling {
             "error while requesting "
           . $param->{url}
           . " - $err";
-        readingsSingleUpdate( $hash, "lastResponse", "ERROR $err", 1 );
+        readingsSingleUpdate( $hash, "last_error", "$err", 1 );
         return;
     }
 
@@ -838,7 +832,7 @@ sub ResponseHandling {
 	#message content error
 	if (defined $decoded_json && ref($decoded_json) eq "HASH" && defined $decoded_json->{errors}){
 		log 1, Dumper $decoded_json;
-		readingsSingleUpdate($hash,'state',"Error: $decoded_json->{errors}[0]->{code} / $decoded_json->{errors}[0]->{title}",0);
+		readingsSingleUpdate($hash,'state',"Error: $decoded_json->{errors}[0]->{code} / $decoded_json->{errors}[0]->{title}" , 1);
 		return undef;
 	}	
 
@@ -1390,6 +1384,11 @@ sub Write ($$)
 {
 	my ($hash, $code, $zoneID, @params) = @_;
 	my $name = $hash->{NAME};
+
+	if (ReadingsVal($name, 'state', 'unknown') =~ /\[ERROR\]/ || ReadingsVal($name, 'state', 'unknown') =~ /Preparing/) {
+		Log3 $name, 4, "Device is in error state or not yet ready. No commands will be executed.";
+		return undef;
+	}
 
 	if ($code eq 'Temp')
 	{
