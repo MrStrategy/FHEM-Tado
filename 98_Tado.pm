@@ -77,25 +77,7 @@ AWAY => " ",
 my  %url = (
 startOAuthDeviceAuth   => 'https://login.tado.com/oauth2/device_authorize',
 getOAuthToken          => 'https://login.tado.com/oauth2/token',
-
-
-getZoneTemperature     => 'https://my.tado.com/api/v2/homes/#HomeID#/zones/#ZoneID#/state',
-setZoneTemperature     => 'https://my.tado.com/api/v2/homes/#HomeID#/zones/#ZoneID#/overlay',
-earlyStart             => 'https://my.tado.com/api/v2/homes/#HomeID#/zones/#ZoneID#/earlyStart',
-getZoneDetails         => 'https://my.tado.com/api/v2/homes/#HomeID#/zones',
-getHomeId              => 'https://my.tado.com/api/v2/me',
-getMobileDevices       => 'https://my.tado.com/api/v2/homes/#HomeID#/mobileDevices',
-UpdateMobileDevice     => 'https://my.tado.com/api/v2/homes/#HomeID#/mobileDevices/#DeviceId#/settings',
-getHomeDetails         =>  'https://my.tado.com/api/v2/homes/#HomeID#',
-getWeather             =>  'https://my.tado.com/api/v2/homes/#HomeID#/weather',
-getDevices             =>  'https://my.tado.com/api/v2/homes/#HomeID#/devices',
-identifyDevice    	   =>  'https://my.tado.com/api/v2/devices/#DeviceId#/identify',
-getAirComfort          =>  'https://my.tado.com/api/v2/homes/#HomeID#/airComfort',
-setPresenceStatus      =>  'https://my.tado.com/api/v2/homes/#HomeID#/presenceLock',
-getPresenceStatus      =>  'https://my.tado.com/api/v2/homes/#HomeID#/state',
 );
-
-
 
 my %dpoints = (
     getZoneTemperature => {
@@ -107,6 +89,9 @@ my %dpoints = (
     getEarlyStart => {
         url      => 'homes/#HomeID#/zones/#ZoneID#/earlyStart',
     },
+    setEarlyStart => {
+        url      => 'homes/#HomeID#/zones/#ZoneID#/earlyStart',
+    },	
     getZones => {
         url      => 'homes/#HomeID#/zones',
     },
@@ -329,6 +314,7 @@ sub _refreshToken {
 
     my $Token         = undef;
 	my $err,
+	my $returnData;
 	my $refreshToken;
     # load token
     $Token = $hash->{'.TOKEN'};
@@ -359,7 +345,7 @@ sub _refreshToken {
         data    => $data
     };
 
-    my ( $err, $returnData ) = HttpUtils_BlockingGet($param);
+    ( $err, $returnData ) = HttpUtils_BlockingGet($param);
 
     if ( $err ne "" ) {
         Log3 $name, 3,
@@ -386,7 +372,7 @@ sub _refreshToken {
 			 if (defined($decoded_data)){
 				$hash->{'.TOKEN'} = $decoded_data;
 				setKeyValue($name."_RefreshToken", $decoded_data->{'refresh_token'}) if length($decoded_data->{'refresh_token'}) > 10;
-				Log3 $name, 1,
+				Log3 $name, 4,
 					"Tado Updated persistent refresh token:" . $decoded_data->{'refresh_token'};
 			 }
 
@@ -545,55 +531,6 @@ sub CanAuthenticate2Tado {
 
 
 
-
-sub httpSimpleOperationOAuth($$$;$)
-{
-	my ($hash,$url, $operation, $message) = @_;
-	my ($json,$err,$data,$decoded);
-	my $name = $hash->{NAME};
-	my $CurrentTokenData = _loadToken($hash);
-
-	my $request = {
-		url           => $url,
-        header => {
-                 "Content-Type" => "application/json;charset=UTF-8",
-                 "Authorization" => "$CurrentTokenData->{'token_type'} $CurrentTokenData->{'access_token'}"
-                 },
-		method        => $operation,
-		timeout       =>  2,
-		hideurl       =>  1
-	};
-
-	$request->{data} = $message if (defined $message);
-	Log3 $name, 5, 'Request: ' . Dumper($request);
-
-	($err,$data)    = HttpUtils_BlockingGet($request);
-
-	$json = "" if( !$json );
-	$data = "" if( !$data );
-	Log3 $name, 4, "FHEM -> Tado: " . $url;
-	Log3 $name, 4, "FHEM -> Tado: " . $message if (defined $message);
-	Log3 $name, 4, "Tado -> FHEM: " . $data if (defined $data);
-	Log3 $name, 4, "Tado -> FHEM: Got empty response."  if (not defined $data);
-	Log3 $name, 5, '$err: ' . $err;
-	Log3 $name, 5, "method: " . $operation;
-	Log3 $name, 2, "Something gone wrong" if( $data =~ "/tadoMode/" );
-
-	$err = 1 if( $data =~ "/tadoMode/" );
-	if (defined $data and (not $data eq '') and $operation ne 'DELETE') {
-		eval {
-			$decoded  = decode_json($data) if( !$err );
-			Log3 $name, 5, 'Decoded: ' . Dumper($decoded);
-			return $decoded;
-		} or do  {
-			Log3 $name, 5, 'Failure decoding: ' . $@;
-		}
-	} else {
-		return undef;
-	}
-}
-
-
 sub Get($@)
 {
 	my ( $hash, $name, @args ) = @_;
@@ -694,22 +631,24 @@ sub Set($@)
 		$hash->{INTERVAL} = $interval;
 
 	} elsif ($opt eq "presence"){
+    	my $status = shift @param;
 
-
-      my $status = shift @param;
-
-			if(!$homeAwayStatus{$status}) {
-				my @pList = keys %homeAwayStatus;
-				return "Unknown argument $status, choose one of presence:HOME,AWAY";
-				#return "Unknown argument $status, choose one of homeAwayStatus:". join(",", @pList);
-			}
-
-			WritePresenceStatus2Tado($hash,$status);
-
-
+		if(!$homeAwayStatus{$status}) {
+			my @pList = keys %homeAwayStatus;
+			return "Unknown argument $status, choose one of presence:HOME,AWAY";
+			#return "Unknown argument $status, choose one of homeAwayStatus:". join(",", @pList);
 		}
-			readingsSingleUpdate($hash,'state','Initialized',0);
-			return undef;
+
+		my %message ;
+		$message{'homePresence'} = $status;
+
+		WriteToCloudAPI( $hash, 'setPresenceStatus', 'PUT',  \%message );
+
+
+	}
+
+	readingsSingleUpdate($hash,'state','Initialized',0);
+	return undef;
 
 }
 
@@ -739,7 +678,38 @@ sub GetZoneTemperatures{
 	}
 }
 
+sub WriteTemperature2Tado {
 
+    my ($hash, $zoneID, $duration, $temperature) = @_;
+    my $name = $hash->{NAME};
+
+	my %message;
+	$message{'setting'}{'type'} = "HEATING";
+
+	if (defined $temperature){
+		if ($temperature eq "off") {
+			$message{'setting'}{'power'} = 'OFF';
+			$message{'termination'}{'durationInSeconds'} = $duration * 60;
+		} else {
+			$message{'setting'}{'power'} = 'ON';
+			$message{'setting'}{'temperature'} {'celsius'} =  $temperature + 0 ;
+		}
+	}
+
+	if ($duration eq "0") {
+		$message{'termination'}{'type'}  = 'MANUAL';
+	} elsif ($duration eq 'Auto') {
+		Log3 $name, 4, 'Return to automatic mode';
+		WriteToCloudAPI( $hash, 'setZoneTemperature', 'DELETE', undef, $zoneID);
+		return undef;
+	} else {
+		$message{'termination'}{'type'}  = 'TIMER';
+		$message{'termination'}{'durationInSeconds'} = $duration * 60;
+	}
+
+	WriteToCloudAPI( $hash, 'setZoneTemperature', 'PUT', \%message, $zoneID);
+	return undef;
+}
 
 sub CanExecuteCloudAPICommand {
     my ($hash, $dpoint) = @_;
@@ -761,7 +731,6 @@ sub CanExecuteCloudAPICommand {
     return (1, undef);
 }
 
-
 sub WriteToCloudAPI {
 	my ($hash, $dpoint, $method, $message, $extraId) = @_;
     my $name = $hash->{NAME};
@@ -770,17 +739,16 @@ sub WriteToCloudAPI {
 
     $payload = encode_json \%$message if defined $message;
 
-
-    my ($canExecute, $msg) = CanExecuteCloudAPICommand($hash, $dpoint);
-    return $msg unless $canExecute;
-
-
     if ( not defined $hash ) {
         my $msg =
           "Error on Tado_WriteToCloudAPI. Missing hash variable";
         Log3 'Tado', 1, $msg;
         return $msg;
     }
+
+    my ($canExecute, $msg) = CanExecuteCloudAPICommand($hash, $dpoint);
+    return $msg unless $canExecute;
+
 
     #Check if HomeID is required in URL and replace or alert.
     if ( $url =~ m/\#HomeID\#/x )
@@ -841,7 +809,6 @@ sub WriteToCloudAPI {
     return;
 
 }
-
 
 sub ResponseHandling {
     my $param = shift;
@@ -989,10 +956,34 @@ sub ResponseHandling {
 		return undef;
 	}
 
+	if ($param->{dpoint} eq 'setPresenceStatus'){
+		WriteToCloudAPI( $hash, 'getPresenceStatus', 'GET', undef);
+		return undef;
+	}
 
+	if ($param->{dpoint} eq 'setZoneTemperature'){
+		GetZoneTemperatures($hash);
+		return undef;
+	}
+
+	if ($param->{dpoint} eq 'setEarlyStart'){
+		WriteToCloudAPI( $hash, 'getEarlyStart', 'GET', undef, $param->{extra_id});
+		return undef;
+	}
+
+	if ($param->{dpoint} eq 'UpdateMobileDevice'){
+		GetMobileDevices($hash);
+		return undef;
+	}
+
+	if ($param->{dpoint} eq 'identifyDevice'){
+		#do nothing
+		return undef;
+	}
+
+	Log3 $name, 1, "Unknown dpoint: $param->{dpoint}";
 
 }
-
 
 sub _dispatchMessage {
 	my $hash    = shift;
@@ -1181,7 +1172,7 @@ sub _autocreateDevice{
 
 	if( defined($modules{TadoDevice}{defptr}{$code}) )
 	{
-		Log3 $name, 1, "GetDevices ($name): device id '$item->{serialNo}' already defined as '$modules{TadoDevice}{defptr}{$code}->{NAME}'";
+		Log3 $name, 4, "GetDevices ($name): device id '$item->{serialNo}' already defined as '$modules{TadoDevice}{defptr}{$code}->{NAME}'";
 
 	} else {
 
@@ -1398,7 +1389,6 @@ sub UpdateDueToTimer($)
 sub Write ($$)
 {
 	my ($hash, $code, $zoneID, @params) = @_;
-
 	my $name = $hash->{NAME};
 
 	if ($code eq 'Temp')
@@ -1408,180 +1398,58 @@ sub Write ($$)
 
 	if ($code eq 'EarlyStart')
 	{
-    return WriteEarlyStart2Tado($hash, $zoneID, @params);
+		my %message ;
+		$message{'enabled'} = shift @params;
+
+		WriteToCloudAPI( $hash, 'setEarlyStart', 'PUT', \%message, $zoneID );
 	}
 
 	if ($code =~ 'geoTrackingEnabled|onDemandLogRetrievalEnabled|specialOffersEnabled')
 	{
-    return WriteMobileSettings2Tado($hash, $zoneID, $code, @params);
+		my %message;
+		$message{$code} = shift @params;
 
+		WriteToCloudAPI( $hash, 'UpdateMobileDevice', 'PUT', \%message , $zoneID);
 	}
 
 	if ($code eq 'pushNotifications')
 	{
-    return WriteMobilePushNotificationSettings2Tado($hash, $zoneID, @params);
+		my %message;
+		my @keys = qw(
+			lowBatteryReminder
+			awayModeReminder
+			homeModeReminder
+			energySavingsReportReminder
+			openWindowReminder
+			energySavingsReportReminder
+			openWindowReminder
+		);
+
+		for my $key (@keys) {
+			my $val = shift @params;
+			$message{'pushNotifications'}->{$key} = $val if defined($val) && $val ne '';
+		}
+
+		WriteToCloudAPI( $hash, 'UpdateMobileDevice', 'PUT', \%message, $zoneID);
 	}
 
 	if ($code eq 'Update')
 	{
 		GetZoneTemperatures($hash);
-		RequestEarlyStartUpdate($hash);
+		WriteToCloudAPI( $hash, 'getEarlyStart', 'GET', undef, $zoneID);
 		WriteToCloudAPI( $hash, 'getWeather', 'GET', undef);
-		WriteToCloudAPI( $hash, 'getMobileDevices', 'GET', undef);
-		WriteToCloudAPI( $hash, 'getAirComfort', 'GET', undef);
-		WriteToCloudAPI( $hash, 'getDevices', 'GET', undef);
+		WriteToCloudAPI( $hash, 'getMobileDevices', 'GET', undef, $zoneID), ;
+		WriteToCloudAPI( $hash, 'getAirComfort', 'GET', undef, $zoneID);
+		WriteToCloudAPI( $hash, 'getDevices', 'GET', undef, $zoneID);
 
 	}
 
 	if ($code eq 'Hi')
 	{
-    return WriteHiRequest2Tado ($hash, $zoneID, @params);
+  		WriteToCloudAPI( $hash, 'identifyDevice', 'POST', undef, $zoneID);
 	}
 
 	return undef;
-}
-
-sub WriteTemperature2Tado {
-
-    my ($hash, $zoneID, $duration, $temperature) = @_;
-    my $name = $hash->{NAME};
-
-    my $readTemplate = GetMessageTemplate( $hash, "setZoneTemperature", $zoneID );
-
-		my %message;
-		$message{'setting'}{'type'} = "HEATING";
-
-		if (defined $temperature){
-			if ($temperature eq "off") {
-				$message{'setting'}{'power'} = 'OFF';
-				$message{'termination'}{'durationInSeconds'} = $duration * 60;
-			} else {
-				$message{'setting'}{'power'} = 'ON';
-				$message{'setting'}{'temperature'} {'celsius'} =  $temperature + 0 ;
-			}
-		}
-
-		if ($duration eq "0") {
-			$message{'termination'}{'type'}  = 'MANUAL';
-		} elsif ($duration eq 'Auto') {
-			Log3 $name, 4, 'Return to automatic mode';
-			my $d = httpSimpleOperationOAuth( $hash , $readTemplate, 'DELETE'  );
-			return undef;
-		} else {
-			$message{'termination'}{'type'}  = 'TIMER';
-			$message{'termination'}{'durationInSeconds'} = $duration * 60;
-		}
-
-		my $d = httpSimpleOperationOAuth( $hash , $readTemplate, 'PUT',  encode_json \%message  );
-		return undef;
-}
-
-sub WriteEarlyStart2Tado{
-
-  my ($hash, $zoneID, $setting) = @_;
-  my $name = $hash->{NAME};
-
-  my $readTemplate = GetMessageTemplate( $hash, "earlyStart", $zoneID );
-
-  my %message ;
-  $message{'enabled'} = $setting;
-
-  my $d = httpSimpleOperationOAuth( $hash , $readTemplate, 'PUT' , encode_json \%message  );
-
-  if (defined $d && ref($d) eq "HASH" && defined $d->{errors}){
-    return "Error: $d->{errors}[0]->{code} / $d->{errors}[0]->{title}";
-  }
-  return $d->{enabled};
-}
-
-sub WriteMobilePushNotificationSettings2Tado {
-
-    my $hash = shift;
-    my $zoneID = shift;
-    my $name = $hash->{NAME};
-
-    my $readTemplate = GetMessageTemplate( $hash, "UpdateMobileDevice", $zoneID );
-
-		my %message ;
-		$message{'pushNotifications'}->{'lowBatteryReminder'}  = shift;
-		$message{'pushNotifications'}->{'awayModeReminder'}  = shift;
-		$message{'pushNotifications'}->{'homeModeReminder'}  = shift;
-		$message{'pushNotifications'}->{'energySavingsReportReminder'}  = shift;
-		$message{'pushNotifications'}->{'openWindowReminder'}  = shift;
-		my $val = shift;
-        $message{'pushNotifications'}->{'energySavingsReportReminder'}  = $val if( defined($val) && !($val eq ''));
-        $val = shift;
-		$message{'pushNotifications'}->{'openWindowReminder'}  = $val if( defined($val) && !($val eq ''));
-
-
-		my $d = httpSimpleOperationOAuth( $hash , $readTemplate, 'PUT' , encode_json \%message  );
-
-		if (defined $d && ref($d) eq "HASH" && defined $d->{errors}){
-			return "Error: $d->{errors}[0]->{code} / $d->{errors}[0]->{title}";
-		}
-		return $d->{enabled};
-}
-
-sub WriteMobileSettings2Tado {
-  my ($hash, $zoneID, $code, $setting) = @_;
-  my $name = $hash->{NAME};
-
-  my $readTemplate = GetMessageTemplate( $hash, "UpdateMobileDevice", $zoneID );
-
-  my %message ;
-  $message{$code} = $setting;
-
-  my $d = httpSimpleOperationOAuth( $hash , $readTemplate, 'PUT' , encode_json \%message  );
-
-  if (defined $d && ref($d) eq "HASH" && defined $d->{errors}){
-    return "Error: $d->{errors}[0]->{code} / $d->{errors}[0]->{title}";
-  }
-  WriteToCloudAPI( $hash, 'getMobileDevices', 'GET', undef);
-  return $d->{enabled};
-}
-
-sub WriteHiRequest2Tado {
-
-  my ($hash, $zoneID) = @_;
-  my $readTemplate = GetMessageTemplate( $hash, "identifyDevice", $zoneID );
-
-  my $d = httpSimpleOperationOAuth( $hash , $readTemplate, 'POST'  );
-
-  if (defined $d && ref($d) eq "HASH" && defined $d->{errors}){
-    return "Error: $d->{errors}[0]->{code} / $d->{errors}[0]->{title}";
-  }
-  return $d->{enabled};
-}
-
-sub WritePresenceStatus2Tado{
-
-	my ($hash, $homeAwayStatus) = @_;
-	my $name = $hash->{NAME};
-
-    my $readTemplate = GetMessageTemplate($hash, "setPresenceStatus" );
-
-	my %message ;
-	$message{'homePresence'} = $homeAwayStatus;
-
-	my $d = httpSimpleOperationOAuth( $hash , $readTemplate, 'PUT',  encode_json \%message  );
-
-	WriteToCloudAPI( $hash, 'getPresenceStatus', 'GET', undef);
-	return undef;
-}
-
-
-sub GetMessageTemplate {
-  my ($hash, $templateName, $zoneID) = @_;
-  my $name = $hash->{NAME};
-
-  my $messageTemplate = $url{$templateName};
-  my $homeID = ReadingsVal ($name,"HomeID",undef);
-
-  $messageTemplate =~ s/#HomeID#/$homeID/g;
-  $messageTemplate =~ s/#ZoneID#/$zoneID/g;
-  $messageTemplate =~ s/#DeviceId#/$zoneID/g;
-
-  return $messageTemplate;
 }
 
 
