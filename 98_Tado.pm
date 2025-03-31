@@ -1517,200 +1517,143 @@ sub Decrypt($)
 <a name="Tado"></a>
 <h3>Tado</h3>
 <ul>
-    <i>Tado</i> implements an interface to the Tado cloud. The plugin can be used to read and write temperature and settings from or to the Tado cloud. The communication is based on the reengineering of the protocol done by Stephen C. Phillips. See <a href="http://blog.scphillips.com/posts/2017/01/the-tado-api-v2/">his blog</a> for more details. Not all functions are implemented within this FHEM extension. By now the plugin is capable to interact with the so called zones (rooms) and the registered devices. The devices cannot be controlled directly. All interaction - like setting a temperature - must be done via the zone and not the device. This means all configuration like the registration of new devices or the assignment of a device to a room must be done using the Tado app or Tado website directly. Once the configuration is completed this plugin can be used. This device is the 'bridge device' like a HueBridge or a CUL. Per zone or device a dedicated device of type 'TadoDevice' will be created.
-    The following features / functionalities are defined by now when using Tado and TadoDevices:
+    <i>Tado</i> provides an interface to the Tado cloud. This module allows you to read and write temperature and settings from/to Tado via its cloud API. Communication is based on the reverse-engineering work by Stephen C. Phillips. See <a href="http://blog.scphillips.com/posts/2017/01/the-tado-api-v2/">his blog</a> for more details.
+
+    Not all Tado features are implemented. Currently, this module supports interaction with zones (rooms) and devices. Devices cannot be controlled directly; instead, all interactions must occur via zones. Configuration such as registering devices or assigning them to rooms must be done via the Tado app or website.
+
+    This FHEM device acts as a bridge (like HueBridge or CUL). A separate device of type <code>TadoDevice</code> is created per zone or hardware device.
+
+    <br><br>
+    <b>Supported Features:</b>
     <ul>
-    	<li>Tado Bridge
-    	<br><ul>
-    		<li>Manages the communication towards the Tado cloud environment and documents the status in several readings like which data was refreshed, when it was rerefershed, etc.</li>
-    		<li><b>Overall Presence status</b> Indicates wether at least one mobile device is 'at Home'</li>
-    		<li><b>Overall Air Comfort</b> Indicates the air comfort of the whole home.</li>
-    	</ul></li>
-    	<li>Zone (basically a room)
-    	<br><ul>
-    		<li><b>Temperature Management:</b> Displays the current temperature, allows to set the desired temperature including the Tado modes which can do this manually or automatically</li>
-    		<li><b>Zone Air Comfort</b> Indicates the air comfort of the specific room.</li>
-    	</ul></li>
-    	<li>Device
-    	   <br><ul>
-    		<li><b>Connection State:</b> Indicate when the actual device was seen the last time</li>
-    		<li><b>Battery Level</b> Indicates the current battery level of the device.</li>
-       		<li><b>Find device</b> Output a 'Hi' message on the display to identify the specific device</li>
-    	</ul></li>
-    	<li>Mobile Device<
-    	  <br><ul>
-    		<li><b>Device Configration:</b> Displays information about the device type and the current configuration (view only)</li>
-    		<li><b>Presence status</b> Indicates if the specific mobile device is Home or Away.</li>
-    	</ul></li>
-    	<li>Weather
-    	  <br><ul>
-    		<li>Displays information about the ouside waether and the solar intensity (cloud source, not actually measured).</li>
-    	</ul></li>
+        <li><b>Bridge</b>
+            <ul>
+                <li>Manages communication with the Tado cloud and provides readings for status and last updates.</li>
+                <li><b>Presence Status:</b> Indicates if at least one mobile device is at home.</li>
+                <li><b>Air Comfort:</b> Shows overall air comfort for the home.</li>
+            </ul>
+        </li>
+        <li><b>Zone (Room)</b>
+            <ul>
+                <li><b>Temperature:</b> Current temperature and target setting including Tado control modes (manual, auto).</li>
+                <li><b>Air Comfort:</b> Zone-specific air quality indicator.</li>
+            </ul>
+        </li>
+        <li><b>Device</b>
+            <ul>
+                <li><b>Connection State:</b> Last seen timestamp.</li>
+                <li><b>Battery Level:</b> Current battery state.</li>
+                <li><b>Say Hi:</b> Displays a message on the device to help identify it.</li>
+            </ul>
+        </li>
+        <li><b>Mobile Device</b>
+            <ul>
+                <li><b>Configuration:</b> View-only info about type and config.</li>
+                <li><b>Presence:</b> Indicates if the mobile device is home or away.</li>
+            </ul>
+        </li>
+        <li><b>Weather</b>
+            <ul>
+                <li>Cloud-sourced outside weather data and solar intensity (not measured).</li>
+            </ul>
+        </li>
     </ul>
-    <br>
-    Since March 2025 Tado changed their authorization concept to enable further protect of the API. Now you need to authenticate a so called device 
-	and classic authentication via username and password is no longer supported. (see https://support.tado.com/en/articles/8565472-how-do-i-authenticate-to-access-the-rest-api) To login proceed like this:
-	<ul>
-		<li>Execute <code>set &lt;device&gt; authenticate<code> command. This will initiate a request to create a new device representing FHEM.
-		The request will reuturn a device code</li>
-		<li>In the response (or device status) you'll see an URL. Open the URL in a new tab. This will open the Tado website and ask you to login and confirm your device.</li>
-		<li>After successful authentication, wait a few seconds as the device polls  for auth updates every few seconds. Then refresh the page and the device should be authenticated.</li>
 
     <br>
+    <b>Authentication (as of March 2025):</b>
     <br>
+    Tado has introduced a new device-based authentication. Username/password login is no longer supported. See <a href="https://support.tado.com/en/articles/8565472-how-do-i-authenticate-to-access-the-rest-api">Tado Support Article</a>.
+
+    <ul>
+        <li>Execute <code>set &lt;device&gt; authenticate</code> to initiate authentication. This registers FHEM as a new device and returns a device code.</li>
+        <li>Follow the URL shown in the response to log into Tado and confirm the new device.</li>
+        <li>After confirmation, the module will poll for updates and complete authentication automatically.</li>
+    </ul>
+
+    <br><br>
     <a name="Tadodefine"></a>
     <b>Define</b>
     <ul>
-        <code>define &lt;name&gt; Tado &lt;interval&gt;</code>
-        <br>
-        <br> Example: <code>define TadoBridge Tado 120</code>
-        <br>
-        <br> The username and password must match the username and password used on the Tado website. Please be aware that username and password are stored and send as plain text. They are visible in FHEM user interface. It is recommended to create a dedicated user account for the FHEM integration. The Tado extension needs to pull the data from the Tado website. The 'Interval' value defines how often the value is refreshed.
+        <code>define &lt;name&gt; Tado &lt;interval&gt;</code><br><br>
+        Example: <code>define TadoBridge Tado 120</code><br><br>
+        This creates a Tado bridge device. The polling interval (in seconds) controls how often data is refreshed.
     </ul>
-    <br>
+
+    <br><br>
+    <a name="Tadoset"></a>
     <b>Set</b>
-    <br>
     <ul>
-        <code>set &lt;name&gt; &lt;option&gt;</code>
-        <br>
-        <br> The <i>set</i> command just offers very limited options. If can be used to control the refresh mechanism. The plugin only evaluates the command. Any additional information is ignored.
-        <br>
-        <br> Options:
+        <code>set &lt;name&gt; &lt;option&gt;</code><br><br>
+        Available options:
         <ul>
-           <li><i>authenticate</i>
-                <br> Invokes the new device authentication process (See description above). Do not invoke this command if you're already authenticated as it will overwrite the existing device login.</li>
-		   <li><i>interval</i>
-                <br> Sets how often the values shall be refreshed. This setting overwrites the value set during define.</li>
-            <li><i>start</i>
-                <br> (Re)starts the automatic refresh. Refresh is autostarted on define but can be stopped using stop command. Using the start command FHEM will start polling again.</li>
-            <li><i>stop</i>
-                <br> Stops the automatic polling used to refresh all values.</li>
-            <li><i>presence</i>
-                <br> Sets the presence value for the whole Tado account. You can set the status to HOME or AWAY and depending on the status all devices will chnange their confiration between home and away mode. If you're using the mobile devices and the Tado premium feature using geofencing to determine home and away status you should not use this function.</li>
+            <li><i>authenticate</i>: Starts device-based login (overwrites existing authentication).</li>
+            <li><i>interval</i>: Changes the polling interval.</li>
+            <li><i>start</i>: Starts automatic polling.</li>
+            <li><i>stop</i>: Stops automatic polling.</li>
+            <li><i>presence</i>: Manually set global presence to HOME or AWAY. Avoid this if geofencing is enabled.</li>
         </ul>
     </ul>
-    <br>
+
+    <br><br>
     <a name="Tadoget"></a>
     <b>Get</b>
-    <br>
     <ul>
-        <code>get &lt;name&gt; &lt;option&gt;</code>
-        <br>
-        <br> You can <i>get</i> the major information from the Tado cloud.
-        <br>
-        <br> Options:
+        <code>get &lt;name&gt; &lt;option&gt;</code><br><br>
+        Available options:
         <ul>
-            <li><i>home</i>
-                <br> Gets the home identifier from Tado cloud. The home identifier is required for all further actions towards the Tado cloud. Currently the FHEM extension only supports a single home. If you have more than one home only the first home is loaded.
-                <br/><b>This function is automatically executed once when a new Tado device is defined.</b></li>
-            <li><i>zones</i>
-                <br> Every zone in the Tado cloud represents a room. This command gets all zones defined for the current home. Per zone a new FHEM device is created. The device can be used to display and overwrite the current temperatures. This command can always be executed to update the list of defined zones. It will not touch any existing zone but add new zones added since last update.
-                <br/><b>This function is automatically executed once when a new Tado device is defined.</b></li>
-            <li><i>update</i>
-                <br/> Updates the values of:
-                <br/>
-                <ul>
-                    <li>All Tado zones</li>
-                    <li>The presence status of the whole tado account</li>
-                    <li>All mobile devices - if attribute <i>generateMobileDevices</i> is set to true</li>
-                    <li>All devices - if attribute <i>generateDevices</i> is set to true</li>
-                    <li>The weather device - if attribute <i>generateWeather</i> is set to true</li>
-                </ul>
-                This command triggers a single update not a continuous refresh of the values.
-            </li>
+            <li><i>home</i>: Fetches home ID and name. Auto-executed during device creation.</li>
+            <li><i>zones</i>: Fetches all Tado zones and creates corresponding FHEM devices.</li>
+            <li><i>update</i>: Triggers a one-time update (zones, presence, weather, devices, mobile devices).</li>
         </ul>
     </ul>
-    <br>
+
+    <br><br>
     <a name="Tadoattr"></a>
     <b>Attributes</b>
     <ul>
-        <code>attr &lt;name&gt; &lt;attribute&gt; &lt;value&gt;</code>
-        <br>
-        <br> You can change the behaviour of the Tado Device.
-        <br>
-        <br> Attributes:
+        <code>attr &lt;name&gt; &lt;attribute&gt; &lt;value&gt;</code><br><br>
+        Available attributes:
         <ul>
-            <li><i>generateDevices</i>
-                <br> By default the devices are not fetched and displayed in FHEM as they don't offer much functionality. The functionality is handled by the zones not by the devices. But the devices offers an identification function <i>sayHi</i> to show a message on the specific display. If this function is required the Devices can be generated. Therefor the attribute <i>generateDevices</i> must be set to <i>yes</i>
-                <br/><b>If this attribute is set to <i>no</i> or if the attribute is not existing no devices will be generated..</b>
-            </li>
-            <li><i>generateMobileDevices</i>
-                <br> By default the mobile devices are not fetched and displayed in FHEM as most users already have a person home recognition. If Tado shall be used to identify if a mobile device is at home this can be done using the mobile devices. In this case the mobile devices can be generated. Therefor the attribute <i>generateMobileDevices</i> must be set to <i>yes</i>
-                <br/><b>If this attribute is set to <i>no</i> or if the attribute is not existing no mobile devices will be generated..</b>
-            </li>
-            <li><i>generateWeather</i>
-                <br> By default no weather channel is generated. If you want to use the weather as it is defined by the tado system for your specific environment you must set this attribute. If the attribute <i>generateWeather</i> is set to <i>yes</i> an additional weather channel can be generated.
-                <br/><b>If this attribute is set to <i>no</i> or if the attribute is not existing no Devices will be generated..</b>
-            </li>
-        </ul>
- </ul>
-    <br>
-    <a name="Tadoreadings"></a>
-    <b>Generated Readings/Events:</b>
-		<br>
-    <ul>
-        <ul>
-            <li><b>DeviceCount</b>
-                <br> Indicates how many devices (hardware devices provided by Tado) are registered in the linked Tado Account.
-                <br/> This reading will only be available / updated if the attribute <i>generateDevices</i> is set to <i>yes</i>.
-            </li>			
-            <li><b>LastUpdate_Devices</b>
-                <br> Indicates when the last successful request to update the hardware devices (TadoDevices) was send to the Tado API. his reading will only be available / updated if the attribute <i>generateDevices</i> is set to <i>yes</i>.
-            </li>
-            <li><b>HomeID</b>
-                <br> Unique identifier for your Tado account instance. All devices are linked to your homeID and the homeID required for almost all Tado API requests.
-            </li>
-            <li><b>HomeName</b>
-                <br> Name of your Tado home as you have configured it in your Tado account.
-            </li>
-            <li><b>Presence</b>
-                <br> The current presence status of your home. The status can be HOME or AWAY and is valid for the whole home and all devices and zones linked to this home. The Presence reading can be influences by the <i>set presence</i> command or based on geofencing using mobile devices.
-            </li>
-            <li><b>airComfort_freshness</b>
-                <br> The overall fresh air indicator for your home. Represents a summary of the single indicators per zone / room.
-            </li>
-            <li><b>airComfort_lastWindowOpen</b>
-                <br> Inidcates the last time an open window was detected by Tado to refresh the air within the home.
-            </li>
-            <li><b>LastUpdate_AirComfort</b>
-                <br> Indicates when the last successful request to update the air comfort was send to the Tado API.
-            </li>
-            <li><b>LastUpdate_MobileDevices</b>
-                <br> Indicates when the last successful request to update the mobile devices was send to the Tado API. his reading will only be available / updated if the attribute <i>generateMobileDevices</i> is set to <i>yes</i>.
-            </li>
-            <li><b>LastUpdate_Weather</b>
-                <br> Indicates when the last successful request to update the weather was send to the Tado API. his reading will only be available / updated if the attribute <i>generateWeather</i> is set to <i>yes</i>.
-            </li>
-            <li><b>LastUpdate_Zones</b>
-                <br> Indicates when the last successful request to update the zone / room data was send to the Tado API.
-            </li>
-            <li><b>MobileDeviceCount</b>
-                <br> Indicates how many mobile devices (mobilefones, tables) connected to your Tado home were reported by the Tado API.
-                <br/> This reading will only be available / updated if the attribute <i>generateMobileDevices</i> is set to <i>yes</i>.				
-            </li>			
-            <li><b>MobileDevice_&lt;deviceid&gt;</b>
-                <br> The module generates one reading per detected mobile device. The reading name gets combined by the mobile device id MobileDevice_&lt;deviceid&gt; and the value reflects the name of the device as reported by Tado.
-            </li>
-          	<li><b>ZoneCount</b>
-                <br> Indicates how many zones / rooms were reported by the Tado API.			
-          	</li>				
-            <li><b>Zone_&lt;zoneid&gt;_Name</b>
-                <br> The module generates one reading per detected zone. The reading name gets combined with the zone id  Zone_&lt;deviceid&gt;_Name and the value reflects the name of the zone as reported by Tado.
-            </li>
-            <li><b>last_error</b>
-                <br> Always keeps the last error of the module. You can use this to review the latest error as well as getting an info when the latets error occured.
-            </li>
-			<li><b>state</b>
-			<br> The state reading indicates the current state of the module. The state can be one of the following values:
-			<ul>
-				<li><i>preparing</i> - The module is preparing itself (e.g. after a startup) and not yet ready.</li>			
-				<li><i>initializing</i> - Authentication was successful and the modul fetches initial data (still not ready for commands).</li>
-				<li><i>initialized</i> - The module is initialized and ready for commands.</li>
-				<li><i>polling</i> - The module is polling mode and automatically fetches updates from Tado API according to the configured interval.</li>
-				<li><i>[Error]</i> - An error occurred while processing a command or updating readings. This state is usually combined with the error message</li>
-			</ul>					
+            <li><i>generateDevices</i>: yes/no — Create Tado hardware devices. Default: no.</li>
+            <li><i>generateMobileDevices</i>: yes/no — Create mobile devices for presence detection. Default: no.</li>
+            <li><i>generateWeather</i>: yes/no — Create weather device. Default: no.</li>
         </ul>
     </ul>
+
+    <br><br>
+    <a name="Tadoreadings"></a>
+    <b>Generated Readings</b><br>
+    (Sorted alphabetically)
+    <br><br>
+    <ul>
+        <li><b>DeviceCount</b>: Number of hardware devices (only if <code>generateDevices=yes</code>).</li>
+        <li><b>HomeID</b>: Tado home identifier.</li>
+        <li><b>HomeName</b>: Tado home name.</li>
+        <li><b>LastUpdate_AirComfort</b>: Timestamp of last air comfort update.</li>
+        <li><b>LastUpdate_Devices</b>: Timestamp of last hardware device update.</li>
+        <li><b>LastUpdate_MobileDevices</b>: Timestamp of last mobile device update (only if <code>generateMobileDevices=yes</code>).</li>
+        <li><b>LastUpdate_Weather</b>: Timestamp of last weather update (only if <code>generateWeather=yes</code>).</li>
+        <li><b>LastUpdate_Zones</b>: Timestamp of last zone/room update.</li>
+        <li><b>MobileDeviceCount</b>: Number of detected mobile devices (only if <code>generateMobileDevices=yes</code>).</li>
+        <li><b>MobileDevice_&lt;deviceid&gt;</b>: Name of each detected mobile device.</li>
+        <li><b>Presence</b>: Global presence status (HOME or AWAY).</li>
+        <li><b>ZoneCount</b>: Number of zones (rooms) detected.</li>
+        <li><b>Zone_&lt;zoneid&gt;_Name</b>: Name of each zone.</li>
+        <li><b>airComfort_freshness</b>: Overall air freshness indicator for the home.</li>
+        <li><b>airComfort_lastWindowOpen</b>: Timestamp of the last open window detection.</li>
+        <li><b>last_error</b>: Last error message and timestamp.</li>
+        <li><b>state</b>: Current internal state of the module.
+            <br>The following states are possible:
+            <ul>
+                <li><i>preparing</i>: The module is initializing after startup and not ready yet.</li>
+                <li><i>initializing</i>: Authentication is completed; initial data is being loaded.</li>
+                <li><i>initialized</i>: The module is ready and operational.</li>
+                <li><i>polling</i>: The module is actively polling for updates.</li>
+                <li><i>[Error]</i>: An error occurred during operation. See <code>last_error</code> for details.</li>
+            </ul>
+        </li>
+    </ul>
+
 </ul>
 
 =end html
