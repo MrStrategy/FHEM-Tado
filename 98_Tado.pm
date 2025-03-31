@@ -178,7 +178,7 @@ sub Setup{
 		InternalTimer(gettimeofday()+ InternalVal($name,'INTERVAL', undef), "FHEM::Tado::UpdateDueToTimer", $hash) if (defined $hash);	
 		return undef;		
 	} else {
-		my $message = "[ERROR] No valid token found. Please authenticate first.";
+		my $message = "[Error] No valid token found. Please authenticate first.";
 		_logError($hash, $message);	
 		readingsSingleUpdate($hash, 'state', $message, 0);
 	}
@@ -793,7 +793,7 @@ sub WriteToCloudAPI
 
 	if ($err) {
 		_logError($hash, $err);		
-		readingsSingleUpdate($hash, 'state', "[ERROR]: $err", 1 );
+		readingsSingleUpdate($hash, 'state', "[Error]: $err", 1 );
 		return undef;
 	}
 
@@ -1405,7 +1405,7 @@ sub Write ($$)
 	my ($hash, $code, $zoneID, @params) = @_;
 	my $name = $hash->{NAME};
 
-	if (ReadingsVal($name, 'state', 'unknown') =~ /\[ERROR\]/ || ReadingsVal($name, 'state', 'unknown') =~ /preparing/ || ReadingsVal($name, 'state', 'unknown') =~ /initializing/) {
+	if (ReadingsVal($name, 'state', 'unknown') =~ /\[Error\]/ || ReadingsVal($name, 'state', 'unknown') =~ /preparing/ || ReadingsVal($name, 'state', 'unknown') =~ /initializing/) {
 		Log3 $name, 4, "Device is in error state or not yet ready. No commands will be executed.";
 		return undef;
 	}
@@ -1548,15 +1548,22 @@ sub Decrypt($)
     	</ul></li>
     </ul>
     <br>
-    While previous versions of this plugin were using plain authentication encoding the username and the password directly in the URL this version now uses OAuth2 which does a secure authentication and uses security tokens afterwards. This is a huge security improvement. The implementation is based on code written by Philipp (Psycho160). Thanks for sharing.
+    Since March 2025 Tado changed their authorization concept to enable further protect of the API. Now you need to authenticate a so called device 
+	and classic authentication via username and password is no longer supported. (see https://support.tado.com/en/articles/8565472-how-do-i-authenticate-to-access-the-rest-api) To login proceed like this:
+	<ul>
+		<li>Execute <code>set &lt;device&gt; authenticate<code> command. This will initiate a request to create a new device representing FHEM.
+		The request will reuturn a device code</li>
+		<li>In the response (or device status) you'll see an URL. Open the URL in a new tab. This will open the Tado website and ask you to login and confirm your device.</li>
+		<li>After successful authentication, wait a few seconds as the device polls  for auth updates every few seconds. Then refresh the page and the device should be authenticated.</li>
+
     <br>
     <br>
     <a name="Tadodefine"></a>
     <b>Define</b>
     <ul>
-        <code>define &lt;name&gt; Tado &lt;username&gt; &lt;password&gt; &lt;interval&gt;</code>
+        <code>define &lt;name&gt; Tado &lt;interval&gt;</code>
         <br>
-        <br> Example: <code>define TadoBridge Tado mail@provider.com somepassword 120</code>
+        <br> Example: <code>define TadoBridge Tado 120</code>
         <br>
         <br> The username and password must match the username and password used on the Tado website. Please be aware that username and password are stored and send as plain text. They are visible in FHEM user interface. It is recommended to create a dedicated user account for the FHEM integration. The Tado extension needs to pull the data from the Tado website. The 'Interval' value defines how often the value is refreshed.
     </ul>
@@ -1570,7 +1577,9 @@ sub Decrypt($)
         <br>
         <br> Options:
         <ul>
-            <li><i>interval</i>
+           <li><i>authenticate</i>
+                <br> Invokes the new device authentication process (See description above). Do not invoke this command if you're already authenticated as it will overwrite the existing device login.</li>
+		   <li><i>interval</i>
                 <br> Sets how often the values shall be refreshed. This setting overwrites the value set during define.</li>
             <li><i>start</i>
                 <br> (Re)starts the automatic refresh. Refresh is autostarted on define but can be stopped using stop command. Using the start command FHEM will start polling again.</li>
@@ -1609,15 +1618,6 @@ sub Decrypt($)
                 </ul>
                 This command triggers a single update not a continuous refresh of the values.
             </li>
-            <li><i>devices</i>
-                <br/> Fetches all devices from Tado cloud and creates one TadoDevice instance per fetched device. This command will only be executed if the attribute <i>generateDevices</i> is set to <i>yes</i>. If the attribute is set to <i>no</i> or not existing an error message will be displayed and no communication towards Tado will be done. This command can always be executed to update the list of defined devices. It will not touch existing devices but add new ones. Devices will not be updated automatically as there are no values continuously changing.
-            </li>
-            <li><i>mobile_devices</i>
-                <br/> Fetches all defined mobile devices from Tado cloud and creates one TadoDevice instance per mobile device. This command will only be executed if the attribute <i>generateMobileDevices</i> is set to <i>yes</i>. If the attribute is set to <i>no</i> or not existing an error message will be displayed and no communication towards Tado will be done. This command can always be executed to update the list of defined mobile devices. It will not touch existing devices but add new ones.
-            </li>
-            <li><i>weather</i>
-                <br/> Creates or updates an additional device for the data bridge containing the weather data provided by Tado. This command will only be executed if the attribute <i>generateWeather</i> is set to <i>yes</i>. If the attribute is set to <i>no</i> or not existing an error message will be displayed and no communication towards Tado will be done.
-            </li>
         </ul>
     </ul>
     <br>
@@ -1653,7 +1653,7 @@ sub Decrypt($)
             <li><b>DeviceCount</b>
                 <br> Indicates how many devices (hardware devices provided by Tado) are registered in the linked Tado Account.
                 <br/> This reading will only be available / updated if the attribute <i>generateDevices</i> is set to <i>yes</i>.
-            </li>
+            </li>			
             <li><b>LastUpdate_Devices</b>
                 <br> Indicates when the last successful request to update the hardware devices (TadoDevices) was send to the Tado API. his reading will only be available / updated if the attribute <i>generateDevices</i> is set to <i>yes</i>.
             </li>
@@ -1684,6 +1684,31 @@ sub Decrypt($)
             <li><b>LastUpdate_Zones</b>
                 <br> Indicates when the last successful request to update the zone / room data was send to the Tado API.
             </li>
+            <li><b>MobileDeviceCount</b>
+                <br> Indicates how many mobile devices (mobilefones, tables) connected to your Tado home were reported by the Tado API.
+                <br/> This reading will only be available / updated if the attribute <i>generateMobileDevices</i> is set to <i>yes</i>.				
+            </li>			
+            <li><b>MobileDevice_&lt;deviceid&gt;</b>
+                <br> The module generates one reading per detected mobile device. The reading name gets combined by the mobile device id MobileDevice_&lt;deviceid&gt; and the value reflects the name of the device as reported by Tado.
+            </li>
+          	<li><b>ZoneCount</b>
+                <br> Indicates how many zones / rooms were reported by the Tado API.			
+          	</li>				
+            <li><b>Zone_&lt;zoneid&gt;_Name</b>
+                <br> The module generates one reading per detected zone. The reading name gets combined with the zone id  Zone_&lt;deviceid&gt;_Name and the value reflects the name of the zone as reported by Tado.
+            </li>
+            <li><b>last_error</b>
+                <br> Always keeps the last error of the module. You can use this to review the latest error as well as getting an info when the latets error occured.
+            </li>
+			<li><b>state</b>
+			<br> The state reading indicates the current state of the module. The state can be one of the following values:
+			<ul>
+				<li><i>preparing</i> - The module is preparing itself (e.g. after a startup) and not yet ready.</li>			
+				<li><i>initializing</i> - Authentication was successful and the modul fetches initial data (still not ready for commands).</li>
+				<li><i>initialized</i> - The module is initialized and ready for commands.</li>
+				<li><i>polling</i> - The module is polling mode and automatically fetches updates from Tado API according to the configured interval.</li>
+				<li><i>[Error]</i> - An error occurred while processing a command or updating readings. This state is usually combined with the error message</li>
+			</ul>					
         </ul>
     </ul>
 </ul>
