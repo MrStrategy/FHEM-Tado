@@ -3,6 +3,16 @@ A FHEM extension to interact with Tado cloud
 
 Latest Update:
 <br>
+<b>31.03.2025:</b>
+  - Implemented new Device-OAuth as required by Tado. 
+    Account based login got fully deactivated by Tado Team.
+    See also "New Device Authentication" within the CommandRef (or down here in this readme)
+  - Major refactoring of the whole code to reduce duplications
+  - All calls are async now (get and sets)
+  - Consistent implementation of last error
+  - Consistent implementation of reading *state*.
+<br>
+
 <b>29.12.2020:</b>
   - Implemented OAuth Authentication (Thanks to Psych160)
   - Updated this readme and the module help  
