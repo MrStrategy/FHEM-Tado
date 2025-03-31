@@ -169,6 +169,7 @@ sub Setup{
 
 	#Initial load of the homes
 	if(CanAuthenticate2Tado($hash)){
+		readingsSingleUpdate($hash, 'state', 'initializing', 0);
 		WriteToCloudAPI( $hash, 'getHomeId', 'GET', undef);		
 		#Call getZones with delay of 15 seconds, as all devices need to be loaded before timer triggers.
 		#Otherwise some error messages are generated due to auto created devices...
@@ -178,8 +179,8 @@ sub Setup{
 		return undef;		
 	} else {
 		my $message = "[ERROR] No valid token found. Please authenticate first.";
-		Log3 $name, 1, "Define $name: $message";
-		readingsSingleUpdate($hash, "state", $message, 0);
+		_logError($hash, $message);	
+		readingsSingleUpdate($hash, 'state', $message, 0);
 	}
 }
 
@@ -236,7 +237,7 @@ sub Define($$)
 	if( $interval < 5 ) { $interval = 5; }
 	$hash->{INTERVAL} = $interval;
 
-	readingsSingleUpdate($hash,'state','Preparing',0);
+	readingsSingleUpdate($hash,'state','preparing',0);
 
 	GenerateAttribute($name,"generateDevices","no");
 	GenerateAttribute($name,"generateMobileDevices","no");
@@ -264,66 +265,75 @@ sub Undef($$)
 }
 
 
+sub _logError
+{
+	my $hash = shift;
+	my $name = $hash->{NAME};
+	my $err  = shift;
 
-sub _loadToken {
+	if (defined $err) {
+		Log3 $name, 1, "Error in device '$name': $err";
+		readingsSingleUpdate($hash, "last_error", $err, 1 );
+	}
+	else {
+		Log3 $name, 1, "Unknown error in device '$name'.";
+		readingsSingleUpdate($hash, "last_error", "Unknown error", 1 );
+	}
+}
+
+sub _loadToken 
+{
     my $hash          = shift;
     my $name          = $hash->{NAME};
-    my $tokenLifeTime = $hash->{TOKEN_LIFETIME};
-    $tokenLifeTime = 0 if ( !defined $tokenLifeTime || $tokenLifeTime eq '' );
-    my $Token = undef;
+    my $tokenLifeTime = $hash->{TOKEN_LIFETIME}; 
+	my $Token = $hash->{'.TOKEN'};
 
-   	$Token = $hash->{'.TOKEN'} ;
+	$tokenLifeTime = 0 if (!defined $tokenLifeTime || $tokenLifeTime eq '' || $tokenLifeTime !~ /^\d+$/);
 
 	# Error while loading
 	if ($@) {
-		Log3 $name, 5,
-			"Tado $name" . ": "
-			. "Error while loading: $@. Please authenticate again.";
-		return undef;
+		return ("Error while loading token: $@. Please authenticate again.", undef);
 	}
 
-	# Token exists & is Valid
+	# Token exists & is Valid for more than 90 seconds
 	if ( defined $Token && defined $Token->{'access_token'}  && $tokenLifeTime > gettimeofday() + 90 ) {
-		return $Token;
+		return (undef, $Token);
 	}
-
 
 	# Token almost expired or expired - refresh it
-	elsif ( $tokenLifeTime < gettimeofday() + 90 ) {
-		Log3 $name, 5, "Tado $name" . ": " . "Token is expiring or expired, requesting new one";
-		$Token = _refreshToken($hash);
-	}
-
-	# Refresh token required. Try refreshing
 	else {
-		_refreshToken($hash);
+		Log3 $name, 5, "Tado $name" . ": " . "Token is expiring or expired, requesting new one";
+		return _refreshToken($hash);
 	}
-
-	return $Token if $Token;
 }
 
-sub _refreshToken {
+sub _refreshToken 
+{
     my $hash          = shift;
     my $name          = $hash->{NAME};
 
     my $Token         = undef;
-	my $err,
+	my $err;
 	my $returnData;
 	my $refreshToken;
     # load token
     $Token = $hash->{'.TOKEN'};
 
 
-	# No token loaded	
+	# No token loaded, get from persistent storage
 	if ( !defined $Token ) {
-		Log3 $name, 1,
-			"Tado $name" . ": "
-			. "No token loaded. Getting latest refresh token from storage.";
+		Log3 $name, 1, "Tado $name" . ": No token loaded. Getting latest refresh token from storage.";
 		($err, $refreshToken) = getKeyValue($name."_RefreshToken");
+
+		if ($err || !defined $refreshToken || $refreshToken eq '') {
+			my $errMsg = "No Token or Refresh Token available. Please authenticate again.";
+			Log3 $name, 1, "Tado $name" . ": $errMsg";
+			return ($errMsg, undef);
+		}
+
 	} else {
 		$refreshToken = $Token->{'refresh_token'};
 	}
-
 
     my $data = {
         client_id     => $oauth{client_id},
@@ -341,49 +351,46 @@ sub _refreshToken {
 
     ( $err, $returnData ) = HttpUtils_BlockingGet($param);
 
+	# Request Error
     if ( $err ne "" ) {
-        Log3 $name, 3,
-            "Tado $name" . ": "
-          . "TokenRefresh: Error in token retrival while requesting "
-          . $param->{url}
-          . " - $err";
-        $hash->{STATE} = "error";
+		my $errMsg = "TokenRefresh: Error in token retrival while requesting ". $param->{url}. " - $err";
+        Log3 $name, 3, "Tado $name" . ": $errMsg";
+		return ($errMsg, undef);
     }
 
     elsif ( $returnData ne "" ) {
         Log3 $name, 5, "url " . $param->{url} . " returned: $returnData";
         my $decoded_data = eval { decode_json($returnData); };
 
+		# JSON decode error
         if ($@) {
-            Log3 $name, 3,
-              "Tado $name" . ": "
-              . "TokenRefresh: decode_json failed, invalid json. error:$@\n"
-              if $@;
-            $hash->{STATE} = "error";
+			my $errMsg = "TokenRefresh: decode_json failed, invalid json. error: $@";
+			Log3 $name, 3, "Tado $name" . ": $errMsg";
+			return ($errMsg, undef);
         }
         else {
             #write token data in file
 			 if (defined($decoded_data)){
 				$hash->{'.TOKEN'} = $decoded_data;
 				setKeyValue($name."_RefreshToken", $decoded_data->{'refresh_token'}) if length($decoded_data->{'refresh_token'}) > 10;
-				Log3 $name, 4,
-					"Tado Updated persistent refresh token:" . $decoded_data->{'refresh_token'};
+				Log3 $name, 4, "Tado Updated persistent refresh token:" . $decoded_data->{'refresh_token'};
 			 }
 
 
             # token lifetime management
-            $hash->{TOKEN_LIFETIME} =
-              gettimeofday() + $decoded_data->{'expires_in'};
+            $hash->{TOKEN_LIFETIME} = gettimeofday() + $decoded_data->{'expires_in'};
             $hash->{TOKEN_LIFETIME_HR} = localtime( $hash->{TOKEN_LIFETIME} );
-            Log3 $name, 5,
-                "Tado $name" . ": "
-              . "TokenRefresh: Refreshed authentication token successfully. Valid until "
-              . localtime( $hash->{TOKEN_LIFETIME} );
-            $hash->{STATE} = "reachable";
-            return $decoded_data;
+            Log3 $name, 5, "Tado $name" . ": TokenRefresh: Refreshed authentication token successfully. Valid until ". localtime( $hash->{TOKEN_LIFETIME} );
+			return (undef, $decoded_data);
         }
     }
-    return;
+
+	else {	
+    	return ("Received empty response from Tado API", undef);
+	}
+
+
+
 }
 
 
@@ -474,8 +481,9 @@ sub UpdateAuthTimer($)
 			Log3 $name, 5,
 				"Tado $name" . ": "
 				. "Retrived new authentication token successfully. Valid until "
-				. localtime( $hash->{TOKEN_LIFETIME} );
-			$hash->{STATE} = "reachable";
+				. localtime( $hash->{TOKEN_LIFETIME} );		
+			readingsSingleUpdate($hash,'state','authenticated',0);
+
 
 			readingsDelete ($hash, "device_auth_url");
 			delete $hash->{AUTH_DEVICE_CODE};
@@ -484,7 +492,7 @@ sub UpdateAuthTimer($)
 
 			RemoveInternalTimer($hash);
 			Setup($hash);
-			readingsSingleUpdate($hash,'state','Polling',0);
+			readingsSingleUpdate($hash,'state','polling',0);
 
 			return $decoded_data;
 		}
@@ -497,7 +505,7 @@ sub UpdateAuthTimer($)
 	if(!$hash->{LOCAL}) {
 		RemoveInternalTimer($hash);
 		InternalTimer(gettimeofday()+ $hash->{AUTH_INTERVAL}, "FHEM::Tado::UpdateAuthTimer", $hash);
-		readingsSingleUpdate($hash,'state','Polling Auth',0);
+		readingsSingleUpdate($hash,'state','polling authentication',0);
 	}
 
 }
@@ -591,8 +599,6 @@ sub Set($@)
 	}
 
 	if ($opt eq "start")	{
-
-		readingsSingleUpdate($hash,'state','Started',0);
 		RemoveInternalTimer($hash);
 
 		$hash->{LOCAL} = 1;
@@ -600,50 +606,51 @@ sub Set($@)
 		delete $hash->{LOCAL};
 
 		InternalTimer(gettimeofday()+ InternalVal($name,'INTERVAL', undef), "FHEM::Tado::UpdateDueToTimer", $hash);
-
 		Log3 $name, 1, sprintf("Set %s: Updated readings and started timer to automatically update readings with interval %s", $name, InternalVal($name,'INTERVAL', undef));
-
-
+		
+		readingsSingleUpdate($hash,'state','polling',0);
+		return undef;
 	}    
 
-	elsif ($opt eq "stop"){
+	if ($opt eq "stop"){
 
 		RemoveInternalTimer($hash);
 		Log3 $name, 1, "Set $name: Stopped the timer to automatically update readings";
-		readingsSingleUpdate($hash,'state','Initialized',0);
+		readingsSingleUpdate($hash,'state','initialized',0);
 		return undef;
 
-	} elsif ($opt eq "interval"){
+	} 
+	
+	if ($opt eq "interval"){
 
 		my $interval = shift @param;
-
 		$interval= 60 unless defined($interval);
 		if( $interval < 5 ) { $interval = 5; }
-
 		Log3 $name, 1, "Set $name: Set interval to" . $interval;
-
 		$hash->{INTERVAL} = $interval;
+		return undef;
 
-	} elsif ($opt eq "presence"){
+	} 
+	
+	if ($opt eq "presence"){
     	my $status = shift @param;
 
 		if(!$homeAwayStatus{$status}) {
 			my @pList = keys %homeAwayStatus;
-			return "Unknown argument $status, choose one of presence:HOME,AWAY";
-			#return "Unknown argument $status, choose one of homeAwayStatus:". join(",", @pList);
+			my $errMsg = "Unknown argument $status, choose one of presence:HOME,AWAY";
+			_logError($hash, $errMsg);
+			return $errMsg;
 		}
 
 		my %message ;
 		$message{'homePresence'} = $status;
 
 		WriteToCloudAPI( $hash, 'setPresenceStatus', 'PUT',  \%message );
-
-
+		return undef;
 	}
 
-	readingsSingleUpdate($hash,'state','Initialized',0);
-	return undef;
-
+	_logError($hash, "Unknown Set-Command: $opt");
+	return "Unknown Set-Command: $opt";
 }
 
 sub Attr(@)
@@ -663,7 +670,8 @@ sub GetZones($)
 	return undef;
 }
 
-sub GetZoneTemperatures{
+sub GetZoneTemperatures
+{
 	my ($hash) = @_;
 	my $name = $hash->{NAME};
 
@@ -672,8 +680,8 @@ sub GetZoneTemperatures{
 	}
 }
 
-sub WriteTemperature2Tado {
-
+sub WriteTemperature2Tado 
+{
     my ($hash, $zoneID, $duration, $temperature) = @_;
     my $name = $hash->{NAME};
 
@@ -705,7 +713,8 @@ sub WriteTemperature2Tado {
 	return undef;
 }
 
-sub CanExecuteCloudAPICommand {
+sub CanExecuteCloudAPICommand 
+{
     my ($hash, $dpoint) = @_;
     my $name = $hash->{NAME};
 
@@ -725,7 +734,8 @@ sub CanExecuteCloudAPICommand {
     return (1, undef);
 }
 
-sub WriteToCloudAPI {
+sub WriteToCloudAPI 
+{
 	my ($hash, $dpoint, $method, $message, $extraId) = @_;
     my $name = $hash->{NAME};
     my $url  = $hash->{APIURI} . $dpoints{$dpoint}->{url};
@@ -779,7 +789,14 @@ sub WriteToCloudAPI {
         $url =~ s/#DeviceID#/$extraId/g;
     }
 
-    my $CurrentTokenData = _loadToken($hash);
+    my ($err, $CurrentTokenData) = _loadToken($hash);
+
+	if ($err) {
+		_logError($hash, $err);		
+		readingsSingleUpdate($hash, 'state', "[ERROR]: $err", 1 );
+		return undef;
+	}
+
     my $header           = {
         "Content-Type" => "application/json;charset=UTF-8",
         "Authorization" =>
@@ -804,7 +821,8 @@ sub WriteToCloudAPI {
 
 }
 
-sub ResponseHandling {
+sub ResponseHandling 
+{
     my $param = shift;
     my $err   = shift;
     my $data  = shift;
@@ -819,20 +837,18 @@ sub ResponseHandling {
 
 	#function call error
 	if ( $err ne "" ) {
-        Log3 $name, 1,
-            "error while requesting "
-          . $param->{url}
-          . " - $err";
-        readingsSingleUpdate( $hash, "last_error", "$err", 1 );
-        return;
+        Log3 $name, 1, "error while requesting ". $param->{url}. " - $err";
+		_logError($hash, $err);
+        return undef;
     }
 
 	eval { $decoded_json = decode_json($data) }; 
 
 	#message content error
 	if (defined $decoded_json && ref($decoded_json) eq "HASH" && defined $decoded_json->{errors}){
+		_logError($hash, "$decoded_json->{errors}[0]->{code} / $decoded_json->{errors}[0]->{title}");
 		log 1, Dumper $decoded_json;
-		readingsSingleUpdate($hash,'state',"Error: $decoded_json->{errors}[0]->{code} / $decoded_json->{errors}[0]->{title}" , 1);
+		readingsSingleUpdate($hash,'state',"[Error]: $decoded_json->{errors}[0]->{code} / $decoded_json->{errors}[0]->{title}" , 1);
 		return undef;
 	}	
 
@@ -852,8 +868,6 @@ sub ResponseHandling {
 
 			Log3 $name, 1, "Attention!! Additional HomeId defined for device '$name'. This is officially not supported by Tado. Id: $decoded_json->{homes}[1]->{id} Name: $saveDeviceName";
 		}
-
-		readingsSingleUpdate($hash,'state','Initialized',0);
 		return undef;
 	}
 
@@ -979,7 +993,8 @@ sub ResponseHandling {
 
 }
 
-sub _dispatchMessage {
+sub _dispatchMessage 
+{
 	my $hash    = shift;
 	my $message = shift;
 	my $name    = $hash->{NAME};
@@ -990,14 +1005,15 @@ sub _dispatchMessage {
 	return $found;
 }
 
-sub _getValue {
+sub _getValue 
+{
 	my ($base, $path) = @_;
 	my $val = eval "\$base->$path";
 	return defined $val ? $val : "";
 }
 
-
-sub Processing_Dpoint_GetZoneTemperature {
+sub Processing_Dpoint_GetZoneTemperature 
+{
     my $hash         = shift;
     my $decode_json = shift;
 	my $zoneID = shift;
@@ -1087,7 +1103,8 @@ sub Processing_Dpoint_GetZoneTemperature {
 	return undef;
 }
 
-sub Processing_Dpoint_GetMobileDevices {
+sub Processing_Dpoint_GetMobileDevices 
+{
     my $hash         = shift;
     my $d 			 = shift;
     my $name         = $hash->{NAME};
@@ -1155,7 +1172,8 @@ sub Processing_Dpoint_GetMobileDevices {
 	return undef;
 }
 
-sub _autocreateDevice{
+sub _autocreateDevice
+{
     my $hash         = shift;
     my $item 		 = shift;
     my $name         = $hash->{NAME};
@@ -1199,7 +1217,8 @@ sub _autocreateDevice{
 	return undef;
 }
 
-sub _autocreateMobileDevice {
+sub _autocreateMobileDevice 
+{
     my $hash         = shift;
     my $item 		 = shift;
     my $name         = $hash->{NAME};
@@ -1241,7 +1260,8 @@ sub _autocreateMobileDevice {
 	}
 }
 
-sub _autocreateWeatherChannel {
+sub _autocreateWeatherChannel 
+{
     my $hash         = shift;
     my $item 		 = shift;
     my $name         = $hash->{NAME};
@@ -1279,7 +1299,8 @@ sub _autocreateWeatherChannel {
 	return undef;
 }
 
-sub Processing_Dpoint_GetZones {
+sub Processing_Dpoint_GetZones 
+{
     my $hash         = shift;
     my $decoded_data = shift;
     my $name         = $hash->{NAME};
@@ -1354,7 +1375,6 @@ sub Processing_Dpoint_GetZones {
 	return undef;
 }
 
-
 sub UpdateDueToTimer($)
 {
 
@@ -1367,7 +1387,7 @@ sub UpdateDueToTimer($)
 		RemoveInternalTimer($hash);
 		#Log3 "Test", 1, Dumper($hash);
 		InternalTimer(gettimeofday()+InternalVal($name,'INTERVAL', undef), "FHEM::Tado::UpdateDueToTimer", $hash);
-		readingsSingleUpdate($hash,'state','Polling',0);
+		readingsSingleUpdate($hash,'state','polling',0);
 	}
 
 
@@ -1385,7 +1405,7 @@ sub Write ($$)
 	my ($hash, $code, $zoneID, @params) = @_;
 	my $name = $hash->{NAME};
 
-	if (ReadingsVal($name, 'state', 'unknown') =~ /\[ERROR\]/ || ReadingsVal($name, 'state', 'unknown') =~ /Preparing/) {
+	if (ReadingsVal($name, 'state', 'unknown') =~ /\[ERROR\]/ || ReadingsVal($name, 'state', 'unknown') =~ /preparing/ || ReadingsVal($name, 'state', 'unknown') =~ /initializing/) {
 		Log3 $name, 4, "Device is in error state or not yet ready. No commands will be executed.";
 		return undef;
 	}

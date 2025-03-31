@@ -125,7 +125,7 @@ sub TadoDevice_Define($$)
 		$i++;
 	}
 
-  readingsSingleUpdate($hash, 'state', 'Initialized', 0);
+    readingsSingleUpdate($hash, 'state', 'Initialized', 0);
 	AssignIoPort($hash,$iodev) if( !$hash->{IODev} );
 
 	if(defined($hash->{IODev})) {
