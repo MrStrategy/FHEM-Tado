@@ -103,7 +103,7 @@ my %dpoints = (
         attribute => 'generateMobileDevices',
     },
     UpdateMobileDevice => {
-        url      => 'homes/#HomeID#/mobileDevices/#DeviceId#/settings',
+        url      => 'homes/#HomeID#/mobileDevices/#DeviceID#/settings',
         attribute => 'generateMobileDevices',
     },
     getHomeDetails => {
@@ -118,7 +118,7 @@ my %dpoints = (
         attribute => 'generateDevices',
     },
     identifyDevice => {
-        url      => 'devices/#DeviceId#/identify',
+        url      => 'devices/#DeviceID#/identify',
         attribute => 'generateDevices',
     },
     getAirComfort => {
@@ -288,7 +288,7 @@ sub _loadToken
     my $tokenLifeTime = $hash->{TOKEN_LIFETIME}; 
 	my $Token = $hash->{'.TOKEN'};
 
-	$tokenLifeTime = 0 if (!defined $tokenLifeTime || $tokenLifeTime eq '' || $tokenLifeTime !~ /^\d+$/);
+	$tokenLifeTime = 0 if (!defined $tokenLifeTime || $tokenLifeTime eq '' || $tokenLifeTime !~ /^\d+(?:\.\d+)?$/);
 
 	# Error while loading
 	if ($@) {
@@ -373,7 +373,7 @@ sub _refreshToken
 			 if (defined($decoded_data)){
 				$hash->{'.TOKEN'} = $decoded_data;
 				setKeyValue($name."_RefreshToken", $decoded_data->{'refresh_token'}) if length($decoded_data->{'refresh_token'}) > 10;
-				Log3 $name, 4, "Tado Updated persistent refresh token:" . $decoded_data->{'refresh_token'};
+				Log3 $name, 4, "Tado Updated persistent refresh token";
 			 }
 
 
@@ -980,7 +980,7 @@ sub ResponseHandling
 	}
 
 	if ($param->{dpoint} eq 'UpdateMobileDevice'){
-		GetMobileDevices($hash);
+		WriteToCloudAPI( $hash, 'getMobileDevices', 'GET', undef);
 		return undef;
 	}
 
